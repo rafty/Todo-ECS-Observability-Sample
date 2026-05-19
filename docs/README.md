@@ -48,7 +48,7 @@ flowchart TB
 - [ネットワーク基盤](./infra/network-baseline.md)
 - [ECR イメージ配布](./infra/ecr-image-deployment.md)
 - [ECS + Aurora + CloudFront + Cognito 実行基盤](./infra/ecs-aurora-runtime-baseline.md)
-- [Cognito 負荷試験ユーザー運用手順](./infra/cognito-load-test-user-operations.md)
+- [Cognito 負荷試験ユーザー運用手順（Todo cleanup 手順含む）](./infra/cognito-load-test-user-operations.md)
 
 ### development
 - [backend 開発手順](./development/backend-development.md)

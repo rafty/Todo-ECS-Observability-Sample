@@ -32,6 +32,8 @@ export class TodoAuroraConstruct extends Construct {
       writer: rds.ClusterInstance.serverlessV2('WriterInstance'),
       serverlessV2MinCapacity: 0.5,
       serverlessV2MaxCapacity: 2,
+      // なぜ必要か: 手動起動のテストデータ削除LambdaからVPC非依存でSQL実行できるようにするため。
+      enableDataApi: true,
       defaultDatabaseName: props.databaseName,
       credentials: rds.Credentials.fromGeneratedSecret('todoapp', {
         secretName: props.secretName,

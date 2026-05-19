@@ -3,6 +3,7 @@
 ## この文書の対象
 
 - 負荷試験用 Cognito ユーザーの作成・削除手順
+- 負荷試験後の Todo データ削除手順
 - 再実行可能な運用フロー
 
 ## 要点
@@ -12,6 +13,7 @@
 - 招待メール送信は `MessageAction=SUPPRESS` で抑止します。
 - 作成後に `AdminSetUserPassword --permanent` を実行し、恒久パスワード化します。
 - 実行レートの目安は 1 秒あたり約 100 リクエストです。
+- Todo 削除は Lambda マネジメントコンソールから手動起動で実施します。
 
 ## 前提
 
@@ -21,6 +23,7 @@
   - `AdminSetUserPassword`
   - `AdminDeleteUser`
   - `ListUsers`
+  - `lambda:InvokeFunction`（Todo cleanup Lambda の手動実行）
 - 必要ツール: AWS CLI v2
 
 ## 手順フロー
@@ -32,7 +35,8 @@ flowchart TD
   C --> D[AdminSetUserPassword permanent]
   D --> E[作成結果を確認]
   E --> F[負荷試験]
-  F --> G[必要時に削除]
+  F --> G[Cognitoユーザー削除]
+  G --> H[Todo cleanup Lambda 手動実行]
 ```
 
 ## 0. 変数設定
@@ -139,7 +143,31 @@ for i in $(seq 1 "${USER_COUNT}"); do
 done
 ```
 
-## 5. エラー時の再実行方針
+## 5. テスト後の Todo 削除（Lambda コンソール手動実行）
+
+1. CloudFormation 出力 `TodoTestDataCleanupLambdaFunctionName` から関数名を確認する。
+2. AWS マネジメントコンソールで Lambda 関数を開く。
+3. `Test` を作成し、イベント JSON を入力して実行する。
+
+`loadtest_` プレフィックスのユーザー Todo のみ削除する場合:
+
+```json
+{
+  "userPrefix": "loadtest_"
+}
+```
+
+全ユーザーの Todo を削除する場合（強い操作）:
+
+```json
+{
+  "userPrefix": "*"
+}
+```
+
+4. 実行後に CloudWatch Logs で `targetCount` / `deletedCount` / `status` を確認する。
+
+## 6. エラー時の再実行方針
 
 - `TooManyRequestsException`:
   - `sleep` を増やして再実行
@@ -148,11 +176,12 @@ done
 - `UsernameExistsException`:
   - 既存ユーザーとして扱い、`admin-set-user-password --permanent` を実行して継続
 
-## 6. 運用上の注意
+## 7. 運用上の注意
 
 - 実行前に AWS Profile / Region / Stack 名を必ず確認してください。
 - 固定パスワード運用は負荷試験用途に限定してください。
 - 実行ログは監査用に保持する運用を推奨します。
+- `userPrefix=*` は全ユーザーの Todo を削除するため、実行対象環境の確認を必須にしてください。
 
 ## 関連
 

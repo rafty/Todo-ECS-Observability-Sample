@@ -27,6 +27,7 @@ test('Network, ECS, ALB, CloudFront, Cognito and Aurora resources are defined', 
   template.resourceCountIs('Custom::CDKBucketDeployment', 1);
   template.resourceCountIs('Custom::CDKECRDeployment', 1);
   template.resourceCountIs('AWS::CodeBuild::Project', 0);
+  template.resourceCountIs('AWS::Events::Rule', 0);
   template.resourceCountIs('AWS::Cognito::UserPool', 1);
   template.resourceCountIs('AWS::Cognito::UserPoolClient', 1);
   template.resourceCountIs('AWS::Cognito::UserPoolDomain', 1);
@@ -76,11 +77,30 @@ test('Network, ECS, ALB, CloudFront, Cognito and Aurora resources are defined', 
   });
   expect(JSON.stringify(template.toJSON())).not.toContain(':latest');
 
+  // なぜ必要か: 手動実行のTodo掃除LambdaがPython 3.13で定義され、入力制御用環境変数を持つことを担保するため。
+  template.hasResourceProperties('AWS::Lambda::Function', {
+    Runtime: 'python3.13',
+    Handler: 'handler.lambda_handler',
+    Timeout: 900,
+    MemorySize: 512,
+    Environment: Match.objectLike({
+      Variables: Match.objectLike({
+        DB_NAME: 'todoapp',
+        BATCH_SIZE: '500',
+      }),
+    }),
+  });
+
+  // なぜ必要か: cleanup Lambda の実行ロールに Data API 実行権限と Secret 読み取り権限が付与されることを担保するため。
+  expect(JSON.stringify(template.toJSON())).toContain('rds-data:ExecuteStatement');
+  expect(JSON.stringify(template.toJSON())).toContain('secretsmanager:GetSecretValue');
+
   // なぜ必要か: AuroraがPostgreSQLエンジンで作成され、todos用途のDB名を保持することを担保するため。
   template.hasResourceProperties('AWS::RDS::DBCluster', {
     Engine: 'aurora-postgresql',
     EngineVersion: '16.13',
     DatabaseName: 'todoapp',
+    EnableHttpEndpoint: true,
   });
 
   // なぜ必要か: ALB経由のヘルスチェックパスが `/actuator/health` に統一されることを担保するため。

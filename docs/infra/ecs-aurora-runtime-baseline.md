@@ -11,6 +11,7 @@
 - 静的配信は S3、API は `/api/*` で ALB に転送します。
 - backend は ECS Fargate 上で稼働し、Aurora/PostgreSQL を利用します。
 - 認証は Cognito Hosted UI（Authorization Code + PKCE）です。
+- 負荷試験後の Todo 掃除は手動起動 Lambda から Aurora Data API で実行します。
 
 ## 構成
 
@@ -23,6 +24,9 @@ flowchart LR
   ECS --> RDS[(Aurora PostgreSQL)]
   ECS --> SM[Secrets Manager]
   ECR[(ECR: todo:imageTag)] --> ECS
+  Ops[Operator] -->|Lambda Console Invoke| Cleanup[Todo Cleanup Lambda]
+  Cleanup -->|RDS Data API| RDS
+  Cleanup --> SM
 
   User --> COGUI[Cognito Hosted UI]
   COGUI -->|code + state| User
@@ -52,6 +56,13 @@ flowchart LR
 - callback: `https://${distributionDomainName}/auth/callback`
 - logout: `https://${distributionDomainName}/`
 - Refresh Token Rotation 有効
+
+### 手動クリーンアップ Lambda
+
+- 実行方式は Lambda マネジメントコンソールからの手動起動のみ
+- 入力値 `userPrefix` は `loadtest_` または `*` のみ許可
+- `userPrefix=*` は全ユーザーの Todo を削除するため、実行前に環境確認が必要
+- Aurora 側は `EnableHttpEndpoint=true`（Data API 有効）を前提とする
 
 ## Security Group 方針
 
