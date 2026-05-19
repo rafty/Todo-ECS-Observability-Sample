@@ -10,6 +10,7 @@ import { TodoCloudFrontConstruct } from './constructs/todo-cloudfront-construct'
 import { TodoCognitoConstruct } from './constructs/todo-cognito-construct';
 import { TodoFrontendDeploymentConstruct } from './constructs/todo-frontend-deployment-construct';
 import { TodoFrontendStaticBucketConstruct } from './constructs/todo-frontend-static-bucket-construct';
+import { TodoTestDataCleanupLambdaConstruct } from './constructs/todo-test-data-cleanup-lambda-construct';
 import { BackendImageDeploymentConstruct } from './constructs/backend-image-deployment-construct';
 import { NetworkVpcConstruct } from './constructs/network-vpc-construct';
 import { TodoEcrRepositoryConstruct } from './constructs/todo-ecr-repository-construct';
@@ -28,6 +29,7 @@ export class InfraStack extends cdk.Stack {
     const applicationPort = 8080;
     const databasePort = 5432;
     const databaseName = 'todoapp';
+    const testDataCleanupBatchSize = 500;
     const healthCheckPath = '/actuator/health';
     const cognitoDomainPrefix = `todo-ecs-sample-${props.environmentName}-auth`;
     const frontendBuildDirectoryPath = path.join(__dirname, '../../frontend/dist');
@@ -74,6 +76,18 @@ export class InfraStack extends cdk.Stack {
       databaseName,
       secretName: `/todo/${props.environmentName}/backend/database`,
     });
+
+    // なぜ必要か: 負荷試験後のTodo掃除を手動実行できる内部バッチを環境ごとに提供するため。
+    const todoTestDataCleanupLambda = new TodoTestDataCleanupLambdaConstruct(
+      this,
+      'TodoTestDataCleanupLambdaConstruct',
+      {
+        cluster: todoAuroraDatabase.cluster,
+        databaseSecret: todoAuroraDatabase.databaseSecret,
+        databaseName: todoAuroraDatabase.databaseName,
+        batchSize: testDataCleanupBatchSize,
+      },
+    );
 
     // なぜ必要か: ECRイメージとDB接続設定を使ってFargateサービスを稼働させるため。
     const todoBackendEcsService = new TodoBackendEcsServiceConstruct(this, 'TodoBackendEcsServiceConstruct', {
@@ -208,6 +222,11 @@ export class InfraStack extends cdk.Stack {
     // なぜ必要か: タスク定義のSecret注入先ARNを運用で参照できるようにするため。
     new cdk.CfnOutput(this, 'TodoAppDatabaseSecretArn', {
       value: todoAuroraDatabase.databaseSecret.secretArn,
+    });
+
+    // なぜ必要か: 運用者がLambdaコンソールで対象関数を誤認しないよう関数名を出力するため。
+    new cdk.CfnOutput(this, 'TodoTestDataCleanupLambdaFunctionName', {
+      value: todoTestDataCleanupLambda.cleanupFunction.functionName,
     });
 
     // なぜ必要か: 全リソースの環境識別・サービス識別・版管理を運用で追跡できるようにする。

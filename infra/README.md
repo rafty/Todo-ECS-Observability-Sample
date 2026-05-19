@@ -62,11 +62,19 @@ npx cdk diff -c env=prod
 - `s3deploy.BucketDeployment` で `frontend/dist` と `runtime-config.json` を配備
 - Cognito App Client に Refresh Token Rotation を追加
 
+## 017-test-data-cleanup で追加された内容
+- 負荷試験後の Todo 掃除用に、手動起動専用 Lambda（Python 3.13）を追加
+- Aurora PostgreSQL の Data API を有効化し、Lambda から VPC 非依存で削除処理を実行
+- Lambda 実行入力 `userPrefix` は `loadtest_` または `*` のみ許可
+- 1 回の削除件数は `BATCH_SIZE`（既定値 `500`）で分割実行
+- Stack 出力 `TodoTestDataCleanupLambdaFunctionName` から対象関数名を確認可能
+
 ## 実行時の注意
 - `cdk deploy` / `cdk synth` / `cdk diff` 実行時に Docker デーモンが必要です。
 - AWS 認証情報に ECR への push 権限が必要です。
 - `dev/stg/prod` いずれの実行でも、対象アカウント側の CDK lookup role を Assume できる認証が必要です。
 - frontend を更新した場合は、`infra` 実行前に `frontend/` で `npm run build` を実行して `dist/` を生成してください。
+- `userPrefix=*` は全ユーザーの Todo を削除するため、実行前に対象環境を必ず確認してください。
 
 ## 関連ドキュメント
 - [ネットワーク詳細](../docs/infra/network-baseline.md)

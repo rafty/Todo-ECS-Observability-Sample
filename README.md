@@ -90,7 +90,9 @@ flowchart LR
 ### ログイン画面（Cognito Hosted UI）
 
 ![](image/login.png)
+---
 ![](image/signin.png)
+---
 ![](image/signup.png)
 
 ## ADR（設計判断）
