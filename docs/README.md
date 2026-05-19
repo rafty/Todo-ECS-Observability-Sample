@@ -13,6 +13,7 @@
 | backend の DB モデル | [backend/data-model.md](./backend/data-model.md) |
 | frontend の認証・runtime 設定 | [frontend/README.md](./frontend/README.md) |
 | infra の構成方針 | [infra/ecs-aurora-runtime-baseline.md](./infra/ecs-aurora-runtime-baseline.md) |
+| 負荷テスト環境（DLT）デプロイ手順 | [load-test/load-test-deployment.md](./load-test/load-test-deployment.md) |
 | 設計判断の背景 | [adr/](./adr/) |
 
 ## 構成
@@ -23,12 +24,14 @@ flowchart TB
   B[backend/]
   F[frontend/]
   I[infra/]
+  L[load-test/]
   D[development/]
   A[adr/]
 
   ROOT --> B
   ROOT --> F
   ROOT --> I
+  ROOT --> L
   ROOT --> D
   ROOT --> A
 ```
@@ -53,6 +56,9 @@ flowchart TB
 ### development
 - [backend 開発手順](./development/backend-development.md)
 - [AWS デプロイ手順（Monorepo 全体）](./development/aws-deployment-manual.md)
+
+### load-test
+- [負荷テスト環境（DLT）デプロイ手順](./load-test/load-test-deployment.md)
 
 ### adr
 - [ADR 001: プロジェクト構成](./adr/001-project-structure.md)
