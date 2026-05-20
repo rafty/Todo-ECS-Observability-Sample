@@ -41,9 +41,12 @@ DLT on AWS については以下を参照ください。
     CloudFormationスタック作成が完了すると、DLTのURLやログインパスワードがメールが来ます。  
     この情報を元にDLTにログインしてください。
 
+## 次に実施する運用手順
+
+- [負荷テスト実行手順（Cognito/JWT/K6/DLT）](load-test-operations.md)
+
 
     
-
 
 
 

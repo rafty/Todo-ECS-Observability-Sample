@@ -14,6 +14,9 @@
 | frontend の認証・runtime 設定 | [frontend/README.md](./frontend/README.md) |
 | infra の構成方針 | [infra/ecs-aurora-runtime-baseline.md](./infra/ecs-aurora-runtime-baseline.md) |
 | 負荷テスト環境（DLT）デプロイ手順 | [load-test/load-test-deployment.md](./load-test/load-test-deployment.md) |
+| 負荷テスト実行手順（Cognito/JWT/K6/DLT） | [load-test/load-test-operations.md](./load-test/load-test-operations.md) |
+| DLT シナリオ作成（画面キャプチャ） | [load-test/dlt-new-scenario.md](./load-test/dlt-new-scenario.md) |
+| DLT 結果確認（画面キャプチャ） | [load-test/dlt-test-result.md](./load-test/dlt-test-result.md) |
 | 設計判断の背景 | [adr/](./adr/) |
 
 ## 構成
@@ -51,7 +54,6 @@ flowchart TB
 - [ネットワーク基盤](./infra/network-baseline.md)
 - [ECR イメージ配布](./infra/ecr-image-deployment.md)
 - [ECS + Aurora + CloudFront + Cognito 実行基盤](./infra/ecs-aurora-runtime-baseline.md)
-- [Cognito 負荷試験ユーザー運用手順（Todo cleanup 手順含む）](./infra/cognito-load-test-user-operations.md)
 
 ### development
 - [backend 開発手順](./development/backend-development.md)
@@ -59,6 +61,9 @@ flowchart TB
 
 ### load-test
 - [負荷テスト環境（DLT）デプロイ手順](./load-test/load-test-deployment.md)
+- [負荷テスト実行手順（Cognito/JWT/K6/DLT）](./load-test/load-test-operations.md)
+- [DLT コンソールで Scenario 作成・実行（画面キャプチャ）](./load-test/dlt-new-scenario.md)
+- [DLT テストシナリオ 実行 結果確認（画面キャプチャ）](./load-test/dlt-test-result.md)
 
 ### adr
 - [ADR 001: プロジェクト構成](./adr/001-project-structure.md)

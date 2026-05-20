@@ -28,6 +28,9 @@ flowchart LR
    - [backend/README.md](./backend/README.md)
    - [frontend/README.md](./frontend/README.md)
    - [infra/README.md](./infra/README.md)
+4. 負荷テスト関連:
+   - [DLT デプロイ手順](./docs/load-test/load-test-deployment.md)
+   - [負荷テスト実行手順（Cognito/JWT/K6/DLT）](docs/load-test/load-test-operations.md)
 
 ## ディレクトリ構成
 

@@ -80,5 +80,5 @@ npx cdk diff -c env=prod
 - [ネットワーク詳細](../docs/infra/network-baseline.md)
 - [ECR配布詳細](../docs/infra/ecr-image-deployment.md)
 - [ECS/Aurora実行基盤](../docs/infra/ecs-aurora-runtime-baseline.md)
-- [Cognito負荷試験ユーザー運用](../docs/infra/cognito-load-test-user-operations.md)
+- [Cognito負荷試験ユーザー運用](../docs/load-test/load-test-operations.md)
 - [ADR](../docs/adr/002-network-baseline-and-env-switching.md)
