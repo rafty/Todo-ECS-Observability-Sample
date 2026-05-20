@@ -45,8 +45,14 @@ export class TodoCognitoConstruct extends Construct {
       userPoolClientName: 'todo-app-client',
       generateSecret: false,
       authFlows: {
+        // なぜ必要か: 負荷試験用JWT生成でAdminInitiateAuth(ADMIN_USER_PASSWORD_AUTH)を利用可能にするため。
+        adminUserPassword: true,
         userSrp: true,
       },
+      // なぜ必要か: DLT負荷試験の実行中にAccess Token/ID Tokenが短時間で期限切れにならないようにするため。
+      accessTokenValidity: cdk.Duration.hours(12),
+      // なぜ必要か: Access Tokenと同一の有効期限にそろえ、検証時のトークン管理を単純化するため。
+      idTokenValidity: cdk.Duration.hours(12),
       oAuth: {
         flows: {
           authorizationCodeGrant: true,

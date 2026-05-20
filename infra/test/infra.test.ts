@@ -178,6 +178,13 @@ test('Network, ECS, ALB, CloudFront, Cognito and Aurora resources are defined', 
     GenerateSecret: false,
     AllowedOAuthFlows: ['code'],
     AllowedOAuthFlowsUserPoolClient: true,
+    ExplicitAuthFlows: Match.arrayWith(['ALLOW_ADMIN_USER_PASSWORD_AUTH', 'ALLOW_USER_SRP_AUTH']),
+    AccessTokenValidity: 720,
+    IdTokenValidity: 720,
+    TokenValidityUnits: Match.objectLike({
+      AccessToken: 'minutes',
+      IdToken: 'minutes',
+    }),
     CallbackURLs: Match.anyValue(),
     LogoutURLs: Match.anyValue(),
     RefreshTokenRotation: Match.objectLike({

@@ -31,3 +31,14 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Load test generated artifacts ###
+load-test/**/tokens.json
+load-test/**/tokens-*.json
+load-test/**/config.json
+load-test/test-case/*.zip
+load-test/test-case/*.tar.gz
+load-test/**/*.log
+load-test/scripts/output/
+load-test/scripts/__pycache__/
+load-test/**/__pycache__/
