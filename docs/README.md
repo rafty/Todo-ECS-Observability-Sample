@@ -64,8 +64,7 @@ flowchart TB
 - [DLT テストシナリオ 実行 結果確認（画面キャプチャ）](./load-test/dlt-test-result.md)
 
 ### adr
-- 
-- 
+- [ADR-0001: ECS Fargate 上の Spring Boot アプリにおける Datadog / OpenTelemetry / ログ収集方式](./adr/adr-0001-o11y-datadog-otel-ecs-fargate.md)
 
 ## 更新時のルール（要約）
 
