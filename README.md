@@ -1,7 +1,7 @@
-# Todo Application on AWS ECS
+# Todo Application on AWS ECS with Observability
 
-Spring Boot / React / AWS CDK で構成した、認証付き Todo アプリケーションのサンプルです。  
-このリポジトリでは、アプリ実装と AWS インフラ定義を 1 つのモノレポで管理します。
+本リポジトリは、[GitHub:rafty/Todo-ECS-Sample](https://github.com/rafty/Todo-ECS-Sample.git)のTodoアプリケーションにObservability機能を実装したものです。  
+Todoアプリケーションの仕様に関しては、[GitHub:rafty/Todo-ECS-Sample](https://github.com/rafty/Todo-ECS-Sample.git)を参照してください。
 
 ## システム概要
 
@@ -15,10 +15,6 @@ flowchart LR
   ECS --> SM[Secrets Manager]
   U --> COG[Cognito Hosted UI]
 ```
-
-- フロントエンドは CloudFront 経由で配信されます。
-- API は `/api/*` で ALB -> ECS の経路にルーティングされます。
-- 認証は Cognito Hosted UI（Authorization Code + PKCE）を利用します。
 
 ## 最初に読むドキュメント
 
@@ -97,8 +93,6 @@ npx cdk diff -c env=prod
 npx cdk deploy -c env=prod
 ```
 
-
-
 ## デプロイ後のアクセス
 
 デプロイ後は CloudFormation 出力値から URL を確認します。
@@ -111,17 +105,14 @@ npx cdk deploy -c env=prod
 例: https://d31esqfuca50la.cloudfront.net/
 ```
 
-![](image/todos.png)
+![Todo](image/todos.png)
 
 ### ログイン画面（Cognito Hosted UI）
 
-![](image/login.png)
+![todo-login](image/login.png)
 ---
-![](image/signin.png)
+![todo-signin](image/signin.png)
 ---
-![](image/signup.png)
+![todo-signup](image/signup.png)
 
 ## ADR（設計判断）
-
-- [ADR 001: プロジェクト構成](./docs/adr/001-project-structure.md)
-- [ADR 002: ネットワーク基盤と環境切替方式](./docs/adr/002-network-baseline-and-env-switching.md)

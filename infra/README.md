@@ -77,8 +77,7 @@ npx cdk diff -c env=prod
 - `userPrefix=*` は全ユーザーの Todo を削除するため、実行前に対象環境を必ず確認してください。
 
 ## 関連ドキュメント
-- [ネットワーク詳細](../docs/infra/network-baseline.md)
-- [ECR配布詳細](../docs/infra/ecr-image-deployment.md)
-- [ECS/Aurora実行基盤](../docs/infra/ecs-aurora-runtime-baseline.md)
+- [docs 入口](../docs/README.md)
+- [AWS デプロイ手順（Monorepo 全体）](../docs/development/aws-deployment-manual.md)
 - [Cognito負荷試験ユーザー運用](../docs/load-test/load-test-operations.md)
-- [ADR](../docs/adr/002-network-baseline-and-env-switching.md)
+- [ADR ディレクトリ](../docs/adr/)

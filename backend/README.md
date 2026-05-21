@@ -47,8 +47,5 @@ AWS 実行時は `CloudFront -> ALB -> ECS -> Aurora` の経路で稼働し、DB
 
 - [docs 全体入口](../docs/README.md)
 - [backend ドキュメント入口](../docs/backend/README.md)
-- [backend API 仕様](../docs/backend/api.md)
-- [backend 設計・セキュリティ](../docs/backend/architecture-security.md)
-- [backend データモデル](../docs/backend/data-model.md)
 - [backend ログ設計](../docs/backend/logging.md)
 - [backend 開発手順](../docs/development/backend-development.md)

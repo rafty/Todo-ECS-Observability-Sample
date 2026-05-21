@@ -72,5 +72,5 @@ curl -i http://localhost:8080/actuator/health
 ## 関連
 
 - [backend 入口 README](../../backend/README.md)
-- [backend API 仕様](../backend/api.md)
-- [infra 実行基盤ドキュメント](../infra/ecs-aurora-runtime-baseline.md)
+- [backend ログ設計](../backend/logging.md)
+- [AWS デプロイ手順（Monorepo 全体）](./aws-deployment-manual.md)

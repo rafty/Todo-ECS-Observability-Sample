@@ -8,12 +8,8 @@
 | 知りたいこと | 参照先 |
 | --- | --- |
 | AWS へデプロイする手順 | [development/aws-deployment-manual.md](./development/aws-deployment-manual.md) |
-| backend API の仕様 | [backend/api.md](./backend/api.md) |
-| backend の設計とセキュリティ方針 | [backend/architecture-security.md](./backend/architecture-security.md) |
-| backend の DB モデル | [backend/data-model.md](./backend/data-model.md) |
 | backend のログ設計 | [backend/logging.md](./backend/logging.md) |
 | frontend の認証・runtime 設定 | [frontend/README.md](./frontend/README.md) |
-| infra の構成方針 | [infra/ecs-aurora-runtime-baseline.md](./infra/ecs-aurora-runtime-baseline.md) |
 | 負荷テスト環境（DLT）デプロイ手順 | [load-test/load-test-deployment.md](./load-test/load-test-deployment.md) |
 | 負荷テスト実行手順（Cognito/JWT/K6/DLT） | [load-test/load-test-operations.md](./load-test/load-test-operations.md) |
 | DLT シナリオ作成（画面キャプチャ） | [load-test/dlt-new-scenario.md](./load-test/dlt-new-scenario.md) |
@@ -44,18 +40,18 @@ flowchart TB
 
 ### backend
 - [backend ドキュメント入口](./backend/README.md)
-- [API 仕様](./backend/api.md)
-- [設計・セキュリティ](./backend/architecture-security.md)
-- [データモデル](./backend/data-model.md)
+- 
+- 
+- 
 - [ログ設計](./backend/logging.md)
 
 ### frontend
 - [frontend ドキュメント入口](./frontend/README.md)
 
 ### infra
-- [ネットワーク基盤](./infra/network-baseline.md)
-- [ECR イメージ配布](./infra/ecr-image-deployment.md)
-- [ECS + Aurora + CloudFront + Cognito 実行基盤](./infra/ecs-aurora-runtime-baseline.md)
+- 
+- 
+- 
 
 ### development
 - [backend 開発手順](./development/backend-development.md)
@@ -68,8 +64,8 @@ flowchart TB
 - [DLT テストシナリオ 実行 結果確認（画面キャプチャ）](./load-test/dlt-test-result.md)
 
 ### adr
-- [ADR 001: プロジェクト構成](./adr/001-project-structure.md)
-- [ADR 002: ネットワーク基盤と環境切替方式](./adr/002-network-baseline-and-env-switching.md)
+- 
+- 
 
 ## 更新時のルール（要約）
 

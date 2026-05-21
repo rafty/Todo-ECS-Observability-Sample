@@ -103,5 +103,5 @@ flowchart LR
 ## 関連
 
 - [backend 入口 README](../../backend/README.md)
-- [backend 設計・セキュリティ](./architecture-security.md)
-- [infra 実行基盤](../infra/ecs-aurora-runtime-baseline.md)
+- [backend ドキュメント入口](./README.md)
+- [infra 入口 README](../../infra/README.md)

@@ -108,4 +108,4 @@ CloudFormation 出力（または `cdk deploy` の出力）で以下を確認し
 ## 関連
 
 - [infra 入口 README](../../infra/README.md)
-- [ECS + Aurora + CloudFront + Cognito 実行基盤](../infra/ecs-aurora-runtime-baseline.md)
+- [docs 入口](../README.md)

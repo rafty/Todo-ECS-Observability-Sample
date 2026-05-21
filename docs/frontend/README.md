@@ -73,5 +73,5 @@ sequenceDiagram
 ## 関連
 
 - [frontend 入口 README](../../frontend/README.md)
-- [backend API 仕様](../backend/api.md)
-- [infra 実行基盤](../infra/ecs-aurora-runtime-baseline.md)
+- [backend 入口 README](../../backend/README.md)
+- [AWS デプロイ手順（Monorepo 全体）](../development/aws-deployment-manual.md)

@@ -255,5 +255,5 @@ python3.13 scripts/delete_cognito_users.py \
 - [負荷テスト環境（DLT）デプロイ手順](./load-test-deployment.md)
 - [DLT コンソールで Scenario 作成・実行（画面キャプチャ）](./dlt-new-scenario.md)
 - [DLT テストシナリオ 実行 結果確認（画面キャプチャ）](./dlt-test-result.md)
-- [Backend API 仕様](../backend/api.md)
-- [ECS + Aurora + CloudFront + Cognito 実行基盤](../infra/ecs-aurora-runtime-baseline.md)
+- [backend 入口 README](../../backend/README.md)
+- [infra 入口 README](../../infra/README.md)
