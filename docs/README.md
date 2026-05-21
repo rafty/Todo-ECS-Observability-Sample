@@ -11,6 +11,7 @@
 | backend API の仕様 | [backend/api.md](./backend/api.md) |
 | backend の設計とセキュリティ方針 | [backend/architecture-security.md](./backend/architecture-security.md) |
 | backend の DB モデル | [backend/data-model.md](./backend/data-model.md) |
+| backend のログ設計 | [backend/logging.md](./backend/logging.md) |
 | frontend の認証・runtime 設定 | [frontend/README.md](./frontend/README.md) |
 | infra の構成方針 | [infra/ecs-aurora-runtime-baseline.md](./infra/ecs-aurora-runtime-baseline.md) |
 | 負荷テスト環境（DLT）デプロイ手順 | [load-test/load-test-deployment.md](./load-test/load-test-deployment.md) |
@@ -46,6 +47,7 @@ flowchart TB
 - [API 仕様](./backend/api.md)
 - [設計・セキュリティ](./backend/architecture-security.md)
 - [データモデル](./backend/data-model.md)
+- [ログ設計](./backend/logging.md)
 
 ### frontend
 - [frontend ドキュメント入口](./frontend/README.md)

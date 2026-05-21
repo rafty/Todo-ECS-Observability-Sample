@@ -76,6 +76,29 @@ flowchart LR
 - AWS CDK v2
 - AWS 利用可能な認証情報（必要に応じて AssumeRole）
 
+
+## ビルド・デプロイのクイック手順
+
+### 1. frontend build
+```shell
+cd frontend
+npm ci
+npm run build
+```
+### 2. backend build & cdk deploy
+
+envが`prod`の場合
+
+```shell
+cd ../infra
+npm ci
+npx cdk synth -c env=prod
+npx cdk diff -c env=prod
+npx cdk deploy -c env=prod
+```
+
+
+
 ## デプロイ後のアクセス
 
 デプロイ後は CloudFormation 出力値から URL を確認します。

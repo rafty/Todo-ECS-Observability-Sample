@@ -1,6 +1,8 @@
 package com.example.backend.exception;
 
 import jakarta.servlet.http.HttpServletRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.validation.FieldError;
@@ -15,6 +17,8 @@ import java.util.Map;
 @RestControllerAdvice
 public class ApiExceptionHandler {
 
+    private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
+
     @ExceptionHandler(TodoNotFoundException.class)
     ProblemDetail handleTodoNotFound(TodoNotFoundException exception, HttpServletRequest request) {
         // なぜ必要か: 権限不整合と未存在を404へ統一し、リソース存在有無の推測を防ぐため。
@@ -22,6 +26,16 @@ public class ApiExceptionHandler {
         problemDetail.setTitle("Not Found");
         problemDetail.setType(URI.create("about:blank"));
         problemDetail.setInstance(URI.create(request.getRequestURI()));
+
+        // なぜ必要か: 想定内の未存在系エラーをWARNで残し、エラー原因と対象パスを運用で追跡できるようにするため。
+        log.atWarn()
+                .setMessage("Todo not found")
+                .addKeyValue("eventType", "ERROR")
+                .addKeyValue("action", request.getMethod())
+                .addKeyValue("httpStatus", 404)
+                .addKeyValue("path", request.getRequestURI())
+                .log();
+
         return problemDetail;
     }
 
@@ -32,6 +46,16 @@ public class ApiExceptionHandler {
         problemDetail.setTitle("Bad Request");
         problemDetail.setType(URI.create("about:blank"));
         problemDetail.setInstance(URI.create(request.getRequestURI()));
+
+        // なぜ必要か: クライアント修正可能な入力エラーをWARNで記録し、異常傾向を把握可能にするため。
+        log.atWarn()
+                .setMessage("Bad request detected")
+                .addKeyValue("eventType", "ERROR")
+                .addKeyValue("action", request.getMethod())
+                .addKeyValue("httpStatus", 400)
+                .addKeyValue("path", request.getRequestURI())
+                .log();
+
         return problemDetail;
     }
 
@@ -52,6 +76,17 @@ public class ApiExceptionHandler {
         problemDetail.setType(URI.create("about:blank"));
         problemDetail.setInstance(URI.create(request.getRequestURI()));
         problemDetail.setProperty("errors", fieldErrors);
+
+        // なぜ必要か: バリデーション失敗の件数をWARNで記録し、入力不備の増加を運用で検知しやすくするため。
+        log.atWarn()
+                .setMessage("Validation failed")
+                .addKeyValue("eventType", "ERROR")
+                .addKeyValue("action", request.getMethod())
+                .addKeyValue("httpStatus", 400)
+                .addKeyValue("path", request.getRequestURI())
+                .addKeyValue("errorCount", fieldErrors.size())
+                .log();
+
         return problemDetail;
     }
 
