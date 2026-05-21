@@ -2,6 +2,7 @@ package com.example.backend.services.impl;
 
 import com.example.backend.exception.BadRequestException;
 import com.example.backend.exception.TodoNotFoundException;
+import com.example.backend.logging.OwnerSubjectHashService;
 import com.example.backend.model.Todo;
 import com.example.backend.repository.TodoRepository;
 import org.junit.jupiter.api.Test;
@@ -29,6 +30,9 @@ class TodoServiceImplTest {
 
     @Mock
     private TodoRepository todoRepository;
+
+    @Mock
+    private OwnerSubjectHashService ownerSubjectHashService;
 
     @InjectMocks
     private TodoServiceImpl todoService;

@@ -3,6 +3,9 @@ package com.example.backend.controllers;
 import com.example.backend.model.Todo;
 import com.example.backend.repository.TodoRepository;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -11,6 +14,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.transaction.annotation.Transactional;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -22,6 +26,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 @Transactional
+@ExtendWith(OutputCaptureExtension.class)
 class TodoControllerTest {
 
     @Autowired
@@ -108,6 +113,95 @@ class TodoControllerTest {
                 .andExpect(jsonPath("$.title").value("Bad Request"))
                 .andExpect(jsonPath("$.status").value(400))
                 .andExpect(jsonPath("$.errors").isArray());
+    }
+
+    @Test
+    void shouldWriteAuditLogForCreateWithoutOwnerSubjectRawValue(CapturedOutput output) throws Exception {
+        final String rawOwnerSubject = "owner-raw-subject-create-marker";
+        final String createBody = """
+                {
+                  "title": "task-for-audit",
+                  "description": "test",
+                  "completed": false
+                }
+                """;
+
+        mockMvc.perform(
+                        post("/api/todos")
+                                .with(accessToken(rawOwnerSubject))
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(createBody)
+                )
+                .andExpect(status().isCreated());
+
+        // なぜ必要か: 監査ログに必要キーが出力されることと、主体識別子の生値非出力を同時に担保するため。
+        assertThat(output.getOut())
+                .contains("Todo created")
+                .contains("eventType")
+                .contains("AUDIT")
+                .contains("action")
+                .contains("CREATE")
+                .contains("ownerSubjectHash")
+                .doesNotContain(rawOwnerSubject);
+    }
+
+    @Test
+    void shouldNotEmitAuditLogForListRequest(CapturedOutput output) throws Exception {
+        mockMvc.perform(
+                        get("/api/todos")
+                                .with(accessToken("owner-list-only"))
+                                .param("page", "0")
+                                .param("size", "20")
+                                .param("sort", "updatedAt,desc")
+                )
+                .andExpect(status().isOk());
+
+        // なぜ必要か: 読み取り系が監査対象外である仕様をログ出力の観点で固定するため。
+        assertThat(output.getOut())
+                .contains("Todo list retrieved")
+                .doesNotContain("Todo created")
+                .doesNotContain("Todo updated")
+                .doesNotContain("Todo deleted");
+    }
+
+    @Test
+    void shouldIncludeTraceIdWhenXAmznTraceIdHeaderIsProvided(CapturedOutput output) throws Exception {
+        mockMvc.perform(
+                        get("/api/todos")
+                                .with(accessToken("owner-trace"))
+                                .header("X-Amzn-Trace-Id", "Root=1-67891233-abcdef012345678912345678;Parent=53995c3f42cd8ad8;Sampled=1")
+                )
+                .andExpect(status().isOk());
+
+        // なぜ必要か: AWSトレースヘッダーから抽出したRoot値がログ相関キーとして残ることを担保するため。
+        assertThat(output.getOut())
+                .contains("traceId")
+                .contains("1-67891233-abcdef012345678912345678");
+    }
+
+    @Test
+    void shouldWriteWarnLogForValidationFailure(CapturedOutput output) throws Exception {
+        final String invalidBody = """
+                {
+                  "title": " ",
+                  "description": "desc"
+                }
+                """;
+
+        mockMvc.perform(
+                        post("/api/todos")
+                                .with(accessToken("owner-validation"))
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(invalidBody)
+                )
+                .andExpect(status().isBadRequest());
+
+        // なぜ必要か: 4xx系の異常がWARNレベルで記録されることを検証し、運用時のログ運用方針を固定するため。
+        assertThat(output.getOut())
+                .contains("Validation failed")
+                .contains("WARN")
+                .contains("httpStatus")
+                .contains("400");
     }
 
     private RequestPostProcessor accessToken(String subject) {
