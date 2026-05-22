@@ -40,7 +40,7 @@ public class SecurityConfig {
     }
 
     @Bean
-    JwtDecoder jwtDecoder(Environment environment) {
+    JwtDecoder jwtDecoder(Environment environment, AccessTokenClaimValidator accessTokenClaimValidator) {
         // なぜ必要か: テスト/ローカルでも必ず issuer を解決し、プレースホルダ未解決での起動失敗を防ぐため。
         final String issuerUri = environment.getProperty(
                 "spring.security.oauth2.resourceserver.jwt.issuer-uri",
@@ -55,7 +55,7 @@ public class SecurityConfig {
         // なぜ必要か: 標準検証（署名/時刻/issuer）に加えて token_use=access を必須化するため。
         final OAuth2TokenValidator<Jwt> validator = new DelegatingOAuth2TokenValidator<>(
                 JwtValidators.createDefaultWithIssuer(issuerUri),
-                new AccessTokenClaimValidator()
+                accessTokenClaimValidator
         );
         jwtDecoder.setJwtValidator(validator);
         return jwtDecoder;

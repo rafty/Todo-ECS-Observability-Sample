@@ -21,20 +21,30 @@ public class RequestLoggingContextFilter extends OncePerRequestFilter {
 
     private static final Logger log = LoggerFactory.getLogger(RequestLoggingContextFilter.class);
     private static final String REQUEST_ID_HEADER = "X-Request-Id";
-    private static final String TRACE_ID_HEADER = "X-Amzn-Trace-Id";
+    private static final String X_AMZN_TRACE_ID_HEADER = "X-Amzn-Trace-Id";
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
         // なぜ必要か: リクエスト単位の相関情報を早い段階で固定し、下流のログ出力全体で共有できるようにするため。
         final String requestId = resolveRequestId(request);
-        final String traceId = resolveTraceId(request.getHeader(TRACE_ID_HEADER));
+        final String xAmznTraceId = resolveXAmznTraceId(request.getHeader(X_AMZN_TRACE_ID_HEADER));
 
         // なぜ必要か: MDCへ共通キーを設定し、Controller/Service/ExceptionHandler の全ログを同一キーで検索可能にするため。
         MDC.put("requestId", requestId);
-        MDC.put("traceId", traceId);
         MDC.put("path", request.getRequestURI());
         MDC.put("httpMethod", request.getMethod());
+        // なぜ必要か: ALBヘッダー由来の追跡IDを補助情報として保持し、AWS側ログとの突合を可能にするため。
+        if (xAmznTraceId != null) {
+            MDC.put("x_amzn_trace_id", xAmznTraceId);
+            // なぜ必要か: AWSヘッダー由来の補助相関IDがログに確実に現れるよう、初期化時点で構造化ログへ出力するため。
+            log.atInfo()
+                    .setMessage("Request tracing context initialized")
+                    .addKeyValue("eventType", "BUSINESS")
+                    .addKeyValue("action", "REQUEST_CONTEXT")
+                    .addKeyValue("x_amzn_trace_id", xAmznTraceId)
+                    .log();
+        }
         response.setHeader(REQUEST_ID_HEADER, requestId);
 
         try {
@@ -65,10 +75,10 @@ public class RequestLoggingContextFilter extends OncePerRequestFilter {
         return UUID.randomUUID().toString();
     }
 
-    private String resolveTraceId(String traceHeader) {
-        // なぜ必要か: ALB由来の `X-Amzn-Trace-Id` 形式（Root=...;Parent=...）から安定した相関キーを抽出するため。
+    private String resolveXAmznTraceId(String traceHeader) {
+        // なぜ必要か: ALB由来の `X-Amzn-Trace-Id` を補助キーとして利用し、ヘッダー形式揺れに追従するため。
         if (traceHeader == null || traceHeader.isBlank()) {
-            return "n/a";
+            return null;
         }
         final String[] segments = traceHeader.split(";");
         for (String segment : segments) {

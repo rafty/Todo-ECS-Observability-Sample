@@ -20,7 +20,7 @@ public class ApiExceptionHandler {
     private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
 
     @ExceptionHandler(TodoNotFoundException.class)
-    ProblemDetail handleTodoNotFound(TodoNotFoundException exception, HttpServletRequest request) {
+    public ProblemDetail handleTodoNotFound(TodoNotFoundException exception, HttpServletRequest request) {
         // なぜ必要か: 権限不整合と未存在を404へ統一し、リソース存在有無の推測を防ぐため。
         final ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Todo not found");
         problemDetail.setTitle("Not Found");
@@ -40,7 +40,7 @@ public class ApiExceptionHandler {
     }
 
     @ExceptionHandler(BadRequestException.class)
-    ProblemDetail handleBadRequest(BadRequestException exception, HttpServletRequest request) {
+    public ProblemDetail handleBadRequest(BadRequestException exception, HttpServletRequest request) {
         // なぜ必要か: パラメータ違反を400として明示し、クライアント側で修正可能なエラーを区別しやすくするため。
         final ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, exception.getMessage());
         problemDetail.setTitle("Bad Request");
@@ -60,7 +60,7 @@ public class ApiExceptionHandler {
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    ProblemDetail handleValidationError(MethodArgumentNotValidException exception, HttpServletRequest request) {
+    public ProblemDetail handleValidationError(MethodArgumentNotValidException exception, HttpServletRequest request) {
         // なぜ必要か: バリデーション失敗の詳細をProblem Detailsへ統一し、クライアント実装の再現性を高めるため。
         final List<Map<String, String>> fieldErrors = exception.getBindingResult()
                 .getFieldErrors()
@@ -85,6 +85,30 @@ public class ApiExceptionHandler {
                 .addKeyValue("httpStatus", 400)
                 .addKeyValue("path", request.getRequestURI())
                 .addKeyValue("errorCount", fieldErrors.size())
+                .log();
+
+        return problemDetail;
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ProblemDetail handleUnhandledException(Exception exception, HttpServletRequest request) {
+        // なぜ必要か: 予期しない例外を500のProblem Detailsへ統一し、API契約と障害解析の再現性を担保するため。
+        final ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(
+                HttpStatus.INTERNAL_SERVER_ERROR,
+                "Internal server error"
+        );
+        problemDetail.setTitle("Internal Server Error");
+        problemDetail.setType(URI.create("about:blank"));
+        problemDetail.setInstance(URI.create(request.getRequestURI()));
+
+        // なぜ必要か: 想定外障害の原因調査に必要なHTTP文脈をERRORで記録し、追跡時間を短縮するため。
+        log.atError()
+                .setMessage("Unhandled exception during request processing")
+                .addKeyValue("eventType", "ERROR")
+                .addKeyValue("action", "UNHANDLED_EXCEPTION")
+                .addKeyValue("httpStatus", 500)
+                .addKeyValue("path", request.getRequestURI())
+                .setCause(exception)
                 .log();
 
         return problemDetail;

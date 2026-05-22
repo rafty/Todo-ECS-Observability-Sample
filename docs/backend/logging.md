@@ -3,7 +3,7 @@
 ## この文書の目的
 
 - `backend/` のアプリケーションログ実装方針を、開発者・運用者が同じ前提で参照できるようにする。
-- AWS 実行環境（ECS -> CloudWatch Logs）で調査可能なログキーと運用ルールを明確化する。
+- AWS 実行環境（ECS -> FireLens -> Datadog Logs）で調査可能なログキーと運用ルールを明確化する。
 
 ## ログ分類
 
@@ -15,6 +15,11 @@
   - 4xx は `WARN`、未処理例外（5xx）は `ERROR` で記録する。
 - デバッグログ（`eventType=DEBUG`）
   - 正規化結果や分岐確認など、調査用途の詳細情報を記録する。
+
+## トレース計装方針（本サンプル固有）
+
+- 本リポジトリの Todo アプリはサンプルでメソッド数が少ないため、Spring 管理 Bean の `public` メソッドを対象に Tracer API 併用で span を付与する。
+- `private` メソッド、DTO/Entity の accessor、Repository static helper は対象外とする。
 
 ## 監査対象範囲
 
@@ -31,7 +36,7 @@
 
 ## JSON フィールド定義
 
-CloudWatch Logs Insights で検索しやすいよう、ログは JSON 構造化形式を前提とする。
+Datadog Logs で検索しやすいよう、ログは JSON 構造化形式を前提とする。
 
 主要フィールド:
 
@@ -39,8 +44,13 @@ CloudWatch Logs Insights で検索しやすいよう、ログは JSON 構造化�
 - `level`
 - `logger`
 - `message`
+- `service`
+- `env`
+- `version`
 - `requestId`
-- `traceId`
+- `trace_id`
+- `span_id`
+- `x_amzn_trace_id`
 - `path`
 - `httpMethod`
 - `httpStatus`
@@ -53,9 +63,13 @@ CloudWatch Logs Insights で検索しやすいよう、ログは JSON 構造化�
 
 - `requestId`
   - `X-Request-Id` が来ていれば利用し、未指定時はサーバー側で採番する。
-- `traceId`
-  - `X-Amzn-Trace-Id` がある場合は `Root=` の値を抽出して利用する。
-- 実装は `OncePerRequestFilter` で MDC に設定し、リクエスト終了時にクリアする。
+- `trace_id` / `span_id`
+  - OpenTelemetry の `Span.current().getSpanContext()` を正とし、Datadog APM 相関の主キーとして利用する。
+  - `trace_id` は 32 文字小文字 hex、`span_id` は 16 文字小文字 hex を使用する。
+- `x_amzn_trace_id`
+  - `X-Amzn-Trace-Id` の `Root=` 値を補助情報として保持し、AWS 側ログとの突合に利用する。
+  - `traceId` というキー名は新規仕様で使用しない。
+- 実装では MDC をリクエスト単位で設定し、終了時にクリアする。
 
 ## 主体識別子（ownerSubject）の扱い
 
@@ -87,18 +101,22 @@ CloudWatch Logs Insights で検索しやすいよう、ログは JSON 構造化�
 ## AWS 運用前提
 
 ```mermaid
-flowchart LR
-  App[Spring Boot on ECS] --> Stdout[Container STDOUT]
-  Stdout --> Cw[CloudWatch Logs]
+flowchart TB
+  App[Spring Boot on ECS] --> Stdout[Container STDOUT JSON]
+  Stdout --> FireLens[FireLens / Fluent Bit]
+  FireLens --> DDLogs[Datadog Logs]
+  App -->|OTLP traces/metrics| DDAgent[Datadog Agent]
+  DDAgent --> DDApm[Datadog APM / Metrics]
 ```
 
 - backend はコンテナ標準出力へログ出力する。
-- ECS タスク定義の `awslogs` ドライバで CloudWatch Logs へ集約する。
+- ログ相関の主調査画面は Datadog（Logs/APM）とする。
+- CloudWatch Logs は診断用途・短期保持用途に限定する（保持期間は infra 方針に従う）。
 
 ## 保持期間ポリシー
 
-- 本プロジェクト（サンプル）では、CloudWatch Logs の保持期間を **1 週間** 前提とする。
-- 正式運用では、監査要件・コンプライアンス要件に従った **長期保持期間** を別途設定する必要がある。
+- Datadog Logs の保持期間、Index、Exclusion Filter は infra/Datadog 運用設計に従う。
+- CloudWatch Logs の保持期間は診断ログ用途に限定し、環境別保持日数は `specs/004-*` の方針に従う。
 
 ## 関連
 
