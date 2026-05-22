@@ -49,6 +49,19 @@ curl -i http://localhost:8080/actuator/health
 
 - `SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI`
 
+### O11y（Datadog / OpenTelemetry）
+
+- `DD_SERVICE`（固定: `todo-backend`）
+- `DD_ENV`（`dev` / `stg` / `prod`）
+- `DD_VERSION`（`backendDockerImageAsset.imageTag` 由来）
+- `OTEL_SERVICE_NAME`
+- `OTEL_RESOURCE_ATTRIBUTES`
+- `OTEL_EXPORTER_OTLP_ENDPOINT`
+- `OTEL_EXPORTER_OTLP_PROTOCOL`
+- `OTEL_TRACES_EXPORTER`
+- `OTEL_METRICS_EXPORTER`
+- `OTEL_LOGS_EXPORTER`
+
 ## テスト環境と実行環境の差分
 
 ### テスト（`src/test/resources/application.properties`）
@@ -68,6 +81,7 @@ curl -i http://localhost:8080/actuator/health
 - ECS 実行時は Secrets Manager から `SPRING_DATASOURCE_*` が注入されます。
 - 公開経路は `CloudFront -> ALB -> ECS` です。
 - JWT 検証は Cognito issuer を前提にしています。
+- ログ相関の主キーは `trace_id` / `span_id` です。`X-Amzn-Trace-Id` は `x_amzn_trace_id` の補助キーとして扱います。
 
 ## 関連
 

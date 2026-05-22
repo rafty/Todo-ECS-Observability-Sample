@@ -38,10 +38,23 @@ AWS 実行時は `CloudFront -> ALB -> ECS -> Aurora` の経路で稼働し、DB
   - `SPRING_DATASOURCE_PASSWORD`
 - JWT 検証
   - `SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI`
+- O11y（Datadog / OpenTelemetry）
+  - `DD_SERVICE`（固定: `todo-backend`）
+  - `DD_ENV`（`dev` / `stg` / `prod`）
+  - `DD_VERSION`（`infra/lib/constructs/backend-image-deployment-construct.ts` の `backendDockerImageAsset.imageTag` 由来）
+  - `OTEL_SERVICE_NAME`
+  - `OTEL_RESOURCE_ATTRIBUTES`
+  - `OTEL_EXPORTER_OTLP_ENDPOINT`
+  - `OTEL_EXPORTER_OTLP_PROTOCOL`
+  - `OTEL_TRACES_EXPORTER`
+  - `OTEL_METRICS_EXPORTER`
+  - `OTEL_LOGS_EXPORTER`
 
 補足:
 - テスト実行時は `src/test/resources/application.properties` により H2 が利用されます。
 - 本番相当（ECS）では Secrets Manager の値が `SPRING_DATASOURCE_*` に注入されます。
+- Datadog Logs/APM 相関では `trace_id` / `span_id` を主キーとし、`X-Amzn-Trace-Id` は `x_amzn_trace_id` で補助的に扱います。
+- 本サンプルではメソッド数が少ないため、Spring 管理 Bean の `public` メソッドを対象に Tracer API 併用で span を付与します。
 
 ## 関連ドキュメント
 

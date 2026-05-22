@@ -65,6 +65,7 @@ flowchart TB
 
 ### adr
 - [ADR-0001: ECS Fargate 上の Spring Boot アプリにおける Datadog / OpenTelemetry / ログ収集方式](./adr/adr-0001-o11y-datadog-otel-ecs-fargate.md)
+- [ADR-0002: OpenTelemetry `trace_id` / `span_id` を正とする Datadog ログ相関方式](./adr/adr-0002-trace-correlation-otel-datadog.md)
 
 ## 更新時のルール（要約）
 
