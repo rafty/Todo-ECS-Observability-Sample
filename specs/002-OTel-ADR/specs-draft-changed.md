@@ -14,8 +14,8 @@
 一方で、障害調査、性能調査、業務処理の追跡、メトリクス監視を Datadog 上で横断的に行えるようにするため、以下を実装する。
 
 - Spring Boot アプリケーションへの OpenTelemetry Spring Boot Starter 導入
-- OpenTelemetry API / annotations による重要業務処理の手動計装
-- Datadog Agent sidecar による OTLP traces / metrics 受信
+- OpenTelemetry API/ annotations による重要業務処理の手動計装
+- Datadog Agent sidecar による OTLP traces / metrics 受信 
 - FireLens / Fluent Bit によるアプリケーションログの Datadog Logs 転送
 - Datadog 上での logs / traces / metrics 相関
 - コスト制御、セキュリティ制御、運用監視

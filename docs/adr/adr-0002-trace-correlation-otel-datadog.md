@@ -6,7 +6,7 @@
 - Reviewers: TBD
 - Supersedes: N/A
 - Superseded by: N/A
-- Related specs: `specs/003-OTel-to-backend/specs.md`, `specs/004-Datadog-agent-to-cdk/specs-draft.md`
+- Related specs: `specs/003-OTel-to-backend-fix-02/specs-draft.md`, `specs/004-Datadog-agent-to-cdk/specs-draft.md`
 - Related plan: N/A
 - Related tasks: N/A
 
@@ -22,6 +22,7 @@
 - ログに出力するトレース相関キーの物理キー名・形式を確定する必要がある。
 - `X-Amzn-Trace-Id` 由来キーと OTel `trace_id` の責務を分離する必要がある。
 - Datadog 側で `trace_id` / `span_id` を Trace ID / Span ID として確実に認識させる必要がある。
+- 同一 Datadog Organization での多アカウント運用に向け、タグ戦略（`service`/`env`/`version` + `team`/`aws_account`/`system`）を整合させる必要がある。
 
 ## 3. 決定ドライバー
 
@@ -42,6 +43,9 @@
 - `X-Amzn-Trace-Id` は補助情報として扱い、必要な場合のみ `x_amzn_trace_id`（または `aws_trace_id`）で保持する。
 - アプリケーション内での相関の正は `Span.current().getSpanContext()` 由来値とする。
 - Unified Service Tagging（`service` / `env` / `version`）を logs/traces で一致させる。
+- Datadog Agent 側では `DD_SERVICE` / `DD_ENV` / `DD_VERSION` を必須とし、`DD_TAGS` で `team` / `aws_account` / `system` を付与する。
+- `DD_SERVICE` / `DD_ENV` / `DD_VERSION` は `DD_TAGS` に重複定義しない。
+- `DD_VERSION` / `service.version` は `infra/lib/constructs/backend-image-deployment-construct.ts` の `backendDockerImageAsset.imageTag` を単一ソースとして利用する。
 
 ### 4.2 採用しないもの
 
@@ -138,7 +142,8 @@ Datadog tracer 由来のキーへ寄せる。
 - Spring Boot / Logback では OTel の MDC 自動注入または OTel Logback Appender を使用し、`trace_id` / `span_id` を JSON へ出力する。
 - `RequestLoggingContextFilter` では `trace_id` / `span_id` を独自生成・上書きしない。
 - `X-Amzn-Trace-Id` は必要に応じて `x_amzn_trace_id` へ格納する。
-- backend 側仕様は `specs/003-OTel-to-backend/specs.md` に反映し、infra 側 Datadog 設定は `specs/004-Datadog-agent-to-cdk/specs-draft.md` で管理する。
+- `opentelemetry-logback-appender-1.0` を導入し、Spring 起動時に `OpenTelemetryAppender.install(openTelemetry)` を初期化する。
+- backend 側仕様は `specs/003-OTel-to-backend-fix-02/specs-draft.md` に反映し、infra 側 Datadog 設定は `specs/004-Datadog-agent-to-cdk/specs-draft.md` で管理する。
 
 ## 9. 運用方針
 
@@ -165,6 +170,7 @@ Datadog tracer 由来のキーへ寄せる。
 - [ ] `traceId` キー名が新規仕様で使われていない。
 - [ ] Datadog で Trace ↔ Logs の双方向遷移ができる。
 - [ ] `service` / `env` / `version` が logs/traces で一致する。
+- [ ] `team` / `aws_account` / `system` が logs/traces/metrics に付与されている。
 
 ## 13. ロールバック / 変更方針
 
