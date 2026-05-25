@@ -107,7 +107,7 @@ CloudWatch Logs だけでは、次のような調査が難しい。
 - Datadog を主要な調査画面とする。
 - アプリケーションログは `SLF4J + Logback` を継続利用し、stdout に JSON 形式で出力する。
 - アプリケーションログは FireLens / Fluent Bit で Datadog Logs に送信する。
-- traces / metrics は OTLP/HTTP で Datadog Agent sidecar に送信する。
+- traces / metrics は OTLP/gRPC で Datadog Agent sidecar に送信する。
 - FireLens は traces / metrics の送信には使わない。
 - 手動 span は重要な業務境界に限定する。
 - metrics は集計目的に限定し、高カーディナリティ属性を避ける。
@@ -170,19 +170,39 @@ flowchart LR
 
 ただし、FireLens ログルーター自身のログや Datadog Agent 自身の診断ログについては、運用要件に応じて CloudWatch Logs または Datadog Logs に送る。
 
-#### 4.1.5 OpenTelemetry traces / metrics は Datadog Agent sidecar に OTLP/HTTP で送信する
+#### 4.1.5 OpenTelemetry traces / metrics は Datadog Agent sidecar に OTLP/gRPC で送信する
 
 Spring Boot アプリケーションには OpenTelemetry Spring Boot Starter を導入し、OpenTelemetry API を使った手動計装を行う。
 
-OpenTelemetry SDK から出力される traces / metrics は、同じ ECS Fargate タスク内の Datadog Agent sidecar に OTLP/HTTP で送信する。
+OpenTelemetry SDK から出力される traces / metrics は、同じ ECS Fargate タスク内の Datadog Agent sidecar に OTLP/gRPC（`localhost:4317`）で送信する。
 
 ```mermaid
 flowchart LR
-  APP["Spring Boot app"] -- "OpenTelemetry traces / metrics (OTLP/HTTP)" --> AG["Datadog Agent sidecar"]
+  APP["Spring Boot app"] -- "OpenTelemetry traces / metrics (OTLP/gRPC)" --> AG["Datadog Agent sidecar"]
   AG --> DDAPM["Datadog APM / Metrics"]
 ```
 
 Datadog Agent は OTLP traces / metrics の受信を有効化する。OTLP logs の受信は、予期しないログ課金を避けるため、原則として無効のままとする。
+
+#### 4.1.5.1 Datadog タグ戦略（fix-02 反映）
+
+同一 Datadog Organization 内で複数 AWS アカウント・複数システムのテレメトリが混在する前提で、以下を標準とする。
+
+- OTel 側（app コンテナ）
+  - `OTEL_SERVICE_NAME=todo-backend`
+  - `OTEL_RESOURCE_ATTRIBUTES=deployment.environment=<env>,service.version=<version>`
+- Datadog Agent 側（sidecar）
+  - `DD_SERVICE=todo-backend`
+  - `DD_ENV=<env>`
+  - `DD_VERSION=<version>`
+  - `DD_TAGS=team:<team> aws_account:<aws-account-id> system:todo`
+
+運用ルール:
+
+- `DD_SERVICE` / `DD_ENV` / `DD_VERSION` は `DD_TAGS` に重複定義しない。
+- `OTEL_SERVICE_NAME` と `DD_SERVICE` は同値に揃える。
+- `DD_VERSION` / `service.version` は `infra/lib/constructs/backend-image-deployment-construct.ts` の `backendDockerImageAsset.imageTag` を単一ソースとして利用する。
+- Logs / Traces / Metrics の横断分析では `service` / `env` / `version` を主キーにし、`aws_account` / `system` / `team` を補助タグとして利用する。
 
 #### 4.1.6 FireLens は traces / metrics の送信には使わない
 
@@ -270,7 +290,7 @@ flowchart TB
   APP -- "logs (stdout/stderr)" --> FL
   FL --> DDLOG["Datadog Logs"]
 
-  APP -- "traces / metrics (OTLP/HTTP)" --> AG
+  APP -- "traces / metrics (OTLP/gRPC)" --> AG
   AG --> DDAPM["Datadog APM / Metrics"]
 
   FL -. "診断ログ（必要時のみ）" .-> CW["CloudWatch Logs（限定用途）"]
@@ -656,7 +676,9 @@ CloudWatch Logs を残す場合の保持期間を次で固定する。
 確認手順: `backend/pom.xml` で OpenTelemetry Starter 依存関係を確認する。
 - [ ] 重要な業務 Service 境界に `@WithSpan` または同等の手動計装が実装されている。  
 確認手順: `src/main/java` を `@WithSpan` で検索し、業務上重要な Service に適用されていることを確認する。
-- [ ] traces / metrics が OTLP/HTTP 経由で Datadog Agent sidecar に送信され、Datadog APM / Metrics で確認できる。  
+- [ ] traces / metrics が OTLP/gRPC 経由で Datadog Agent sidecar に送信され、Datadog APM / Metrics で確認できる。
+- [ ] `DD_SERVICE` / `DD_ENV` / `DD_VERSION` と `OTEL_SERVICE_NAME` / `OTEL_RESOURCE_ATTRIBUTES` が整合している。
+- [ ] `DD_TAGS` に `team` / `aws_account` / `system` が設定され、`DD_SERVICE` / `DD_ENV` / `DD_VERSION` は重複定義されていない。
 確認手順: Trace Explorer で `service:todo-backend env:prod`、Metrics で `service:todo-backend` を指定して受信を確認する。
 - [ ] Datadog 上で trace から該当ログへ遷移できる。  
 確認手順: Trace 詳細画面から関連ログリンクを開き、同一 `trace_id` のログが表示されることを確認する。
@@ -671,7 +693,7 @@ CloudWatch Logs を残す場合の保持期間を次で固定する。
 
 - 次の条件のいずれかを満たした場合は再検討する。
   - Datadog Logs コストが月次予算を継続的に超過する。
-  - OTLP/HTTP 送信の互換性問題で APM 可観測性が維持できない。
+  - OTLP/gRPC 送信の互換性問題で APM 可観測性が維持できない。
   - 監査要件変更により CloudWatch 側の長期保管が必須になる。
 - ロールバック時は、次の順序で戻す。
   1. application container のログドライバーを `awslogs` に戻す。

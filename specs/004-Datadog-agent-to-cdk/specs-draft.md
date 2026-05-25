@@ -12,7 +12,7 @@
 
 本仕様の対象は、ECS タスク定義、Datadog Agent sidecar、FireLens/Fluent Bit、CloudWatch Logs の限定保持、Datadog 側の運用設定である。  
 
-アプリケーションコード自体の実装は `../003-OTel-to-backend/specs.md` の対象とする。  
+アプリケーションコード自体の実装は `../003-OTel-to-backend-fix-02/specs-draft.md` の対象とする。  
 
 ## 2. ゴール
 
@@ -20,7 +20,7 @@
 
 - ECS タスクで app / datadog-agent / log_router が同時に起動する。
 - app ログが FireLens 経由で Datadog Logs に到達する。
-- app の traces / metrics が OTLP/HTTP で Datadog Agent 経由で Datadog APM/Metrics に到達する。
+- app の traces / metrics が OTLP/gRPC で Datadog Agent 経由で Datadog APM/Metrics に到達する。
 - Datadog 上で `env` / `service` / `version` により横断検索できる。
 - FireLens / Datadog Agent の診断ログを CloudWatch Logs に限定的に保持できる。
 
@@ -34,7 +34,7 @@
 
 - backend 業務コードへの `@WithSpan` 追加（backend 側で対応）
 - OpenTelemetry Logs API を業務ログ API として利用する構成
-- OTLP/gRPC 採用（本仕様では OTLP/HTTP 固定）
+- OTLP/gRPC 以外（特に OTLP/HTTP）を traces / metrics の主経路として採用する構成
 
 ## 4. 最終アーキテクチャ
 
@@ -49,7 +49,7 @@ flowchart TB
   APP -- "stdout / stderr logs" --> FL
   FL --> DDLOG["Datadog Logs"]
 
-  APP -- "OTLP/HTTP traces / metrics" --> AG
+  APP -- "OTLP/gRPC traces / metrics" --> AG
   AG --> DDAPM["Datadog APM / Metrics"]
 
   FL -. "diagnostic logs (limited)" .-> CW["CloudWatch Logs"]
@@ -71,31 +71,54 @@ ECS_FARGATE=true
 DD_APM_ENABLED=true
 DD_SITE=<datadog-site>
 DD_ENV=<env>
-DD_SERVICE=todo-backend
+DD_SERVICE=<service-name>
 DD_VERSION=<version>
 ```
 
 `DD_API_KEY` は Secrets Manager 等から secret として注入する。
 
-#### REQ-INF-DDAGENT-002: OTLP receiver (HTTP 固定)
+#### REQ-INF-DDAGENT-002: OTLP receiver (gRPC 固定)
 
-OTLP/HTTP を固定で採用する。Datadog Agent には次を設定する。
+OTLP/gRPC を固定で採用する。Datadog Agent には次を設定する。
 
 ```text
-DD_OTLP_CONFIG_RECEIVER_PROTOCOLS_HTTP_ENDPOINT=0.0.0.0:4318
+DD_OTLP_CONFIG_RECEIVER_PROTOCOLS_GRPC_ENDPOINT=0.0.0.0:4317
 ```
 
 app コンテナには次を設定する（CDK から環境変数を注入）。
 
 ```text
-OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
-OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
 OTEL_TRACES_EXPORTER=otlp
 OTEL_METRICS_EXPORTER=otlp
 OTEL_LOGS_EXPORTER=none
 ```
 
-OTLP/gRPC は本仕様では採用しない。
+OTLP/HTTP は本仕様では採用しない。
+
+#### REQ-INF-DDAGENT-004: Datadog タグ戦略
+
+Datadog Agent コンテナでは Unified Service Tagging とカスタムタグを次のルールで設定する。
+
+```text
+DD_SERVICE=<service-name>
+DD_ENV=<env>
+DD_VERSION=<version>
+DD_TAGS=team:<team> aws_account:<aws-account-id> system:<system-name>
+```
+
+ルール:
+
+- `DD_SERVICE` / `DD_ENV` / `DD_VERSION` は `DD_TAGS` に重複定義しない。
+- app コンテナの `OTEL_SERVICE_NAME` と `DD_SERVICE` は同値に揃える。
+- app コンテナの `OTEL_RESOURCE_ATTRIBUTES` には `deployment.environment` と `service.version` を含める。
+
+値の取得方針（CDK）:
+
+- `<aws-account-id>` は `environment-config.ts` の `accountId` を利用する。
+- `<team>` / `<service-name>` / `<system-name>` は `infra/lib/config/environment-config.ts` に明示的に定義して注入する（現状の `EnvironmentConfig` には未定義のため追加実装が必要）。
+- `<team>` / `<service-name>` / `<system-name>` は環境共通値として `environment-config.ts` で一元管理し、`dev` / `stg` / `prod` で同一値を利用する。
+- `<version>` は `infra/lib/constructs/backend-image-deployment-construct.ts` の `backendDockerImageAsset.imageTag` を利用する。
 
 #### REQ-INF-DDAGENT-003: OTLP logs ingestion
 
@@ -144,7 +167,7 @@ app コンテナの log driver は `awsfirelens` とする。
       "Host": "http-intake.logs.datadoghq.com",
       "TLS": "on",
       "provider": "ecs",
-      "dd_service": "todo-backend",
+      "dd_service": "<service-name>",
       "dd_source": "java",
       "dd_tags": "env:<env>,version:<version>",
       "dd_message_key": "message",
@@ -205,10 +228,10 @@ CDK から app / datadog-agent に環境変数を注入し、少なくとも次�
 
 ```text
 DD_ENV=<env>
-DD_SERVICE=todo-backend
+DD_SERVICE=<service-name>
 DD_VERSION=<version>
-OTEL_SERVICE_NAME=todo-backend
-OTEL_RESOURCE_ATTRIBUTES=service.name=todo-backend,service.version=<version>,deployment.environment=<env>
+OTEL_SERVICE_NAME=<service-name>
+OTEL_RESOURCE_ATTRIBUTES=service.name=<service-name>,service.version=<version>,deployment.environment=<env>
 ```
 
 ## 6. Datadog 設定要件
@@ -255,12 +278,13 @@ OTEL_RESOURCE_ATTRIBUTES=service.name=todo-backend,service.version=<version>,dep
 
 ### 7.3 確認手順（抜粋）
 
-- Logs Explorer: `service:todo-backend env:prod @trace_id:* @span_id:*`
-- Trace Explorer: `service:todo-backend env:prod`
+- Logs Explorer: `service:<service-name> env:<env> @trace_id:* @span_id:*`
+- Trace Explorer: `service:<service-name> env:<env>`
 - ECS タスク定義:
   - app: `logDriver=awsfirelens`
-  - app: `OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf`
-  - app: `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318`
+  - app: `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317`
+  - datadog-agent: `DD_OTLP_CONFIG_RECEIVER_PROTOCOLS_GRPC_ENDPOINT=0.0.0.0:4317`
+  - datadog-agent: `DD_TAGS=team:<team> aws_account:<aws-account-id> system:<system-name>`
   - log_router / datadog-agent の CloudWatch retention が `dev=3日, stg=7日, prod=14日`
 
 ## 8. テスト方針
@@ -269,7 +293,7 @@ OTEL_RESOURCE_ATTRIBUTES=service.name=todo-backend,service.version=<version>,dep
 
 - ECS Fargate 上で app / datadog-agent / log_router が同一タスクとして起動すること
 - FireLens 経由で Datadog Logs にログが届くこと
-- OTLP/HTTP 経由で Datadog APM / Metrics に telemetry が届くこと
+- OTLP/gRPC 経由で Datadog APM / Metrics に telemetry が届くこと
 - Datadog APM trace と Datadog Logs が相関できること
 
 ### 8.2 障害試験
