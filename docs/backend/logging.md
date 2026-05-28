@@ -111,12 +111,12 @@ flowchart TB
 
 - backend はコンテナ標準出力へログ出力する。
 - ログ相関の主調査画面は Datadog（Logs/APM）とする。
-- CloudWatch Logs は診断用途・短期保持用途に限定する（保持期間は infra 方針に従う）。
+- CloudWatch Logs は sidecar（`log_router` / `datadog-agent`）の診断用途・短期保持用途に限定する。
 
 ## 保持期間ポリシー
 
 - Datadog Logs の保持期間、Index、Exclusion Filter は infra/Datadog 運用設計に従う。
-- CloudWatch Logs の保持期間は診断ログ用途に限定し、環境別保持日数は `specs/004-*` の方針に従う。
+- CloudWatch Logs の保持期間は診断ログ用途に限定し、環境別保持日数は `docs/infra/o11y.md` の方針（`dev=3日, stg=7日, prod=14日`）に従う。
 
 ## 関連
 

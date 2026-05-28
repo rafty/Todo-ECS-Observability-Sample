@@ -70,6 +70,18 @@ sequenceDiagram
 4. `/` と `/auth/callback` が到達することを確認する。
 5. Cognito 設定入り `runtime-config.json` でログインと Todo CRUD を確認する。
 
+## トラブルシュート（ログインループ）
+
+- 症状:
+  - Hosted UI で認証完了後、frontend が再びログイン画面へ戻る
+- 典型原因:
+  - backend 側の `SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI` が Cognito の実 issuer と不一致
+  - その結果 `/api/*` が `401/403` になり、frontend がセッション破棄 -> 再ログイン導線へ戻る
+- 確認ポイント:
+  - CloudFormation 出力 `TodoAppCognitoIssuerUrl`
+  - ECS `TodoBackendContainer` の環境変数 `SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI`
+  - Datadog Logs の `AccessDeniedException` / `JwtValidation` 系ログ
+
 ## 関連
 
 - [frontend 入口 README](../../frontend/README.md)

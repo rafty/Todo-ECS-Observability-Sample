@@ -6,14 +6,11 @@ WORKDIR /workspace
 
 # なぜ必要か: 依存解決をソースコードコピーより先に実行し、Dockerレイヤーキャッシュを効かせるため。
 COPY pom.xml ./
-COPY .mvn/ .mvn/
-COPY mvnw ./
-RUN chmod +x ./mvnw
-RUN ./mvnw -B -q -DskipTests dependency:go-offline
+RUN mvn -B -q -DskipTests dependency:go-offline
 
 # なぜ必要か: アプリ本体をコピーして実行可能Jarを作成するため。
 COPY src/ src/
-RUN ./mvnw -B -DskipTests package
+RUN mvn -B -DskipTests package
 
 # なぜ必要か: 実行環境をAmazon Correttoに固定し、JDKとOS差分を減らすため。
 FROM amazoncorretto:21-alpine3.20

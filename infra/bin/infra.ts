@@ -23,4 +23,5 @@ new InfraStack(app, `InfraStack-${environmentConfig.environmentName}`, {
   environmentName: environmentConfig.environmentName,
   serviceName: 'Todo',
   version: '1.00',
+  datadogConfig: environmentConfig.datadog,
 });

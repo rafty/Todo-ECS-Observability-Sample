@@ -4,7 +4,6 @@
 AWSのプロフェッショナルな視点で、これを分析し、`SddTemplates/spec-template.md` を参考に
 要件`specs/004-Datadog-agent-to-cdk/specs.md` を作ってください。
 
-また、本要件において、必要なDatadog側の情報(例えば、API Keyやアカウント名など)があれば、`未決事項`等に記載してください。
 また、specs-draft.mdを分析する上で内容や技術に関しておかしな点、間違った点などがあれば、これも`未決事項`等に記載してください。
 
 ## 1.1. specs-draft.mdの改善: => specs.md
@@ -35,13 +34,16 @@ AWSのプロフェッショナルな視点で、`specs-draft.md`のドラフト�
 タスクリスト `specs/004-Datadog-agent-to-cdk/tasks.md` を完了してください。
 `specs/004-Datadog-agent-to-cdk/spec.md`、
 `specs/004-Datadog-agent-to-cdk/plan.md`、
-`specs/004-Datadog-agent-to-cdk/tasks.md`を参照し、
+`specs/004-Datadog-agent-to-cdk/tasks.md`、
+`docs/adr/`のADR を参照し、
 すべてのコンテキストを考慮してタスクリスト内のタスクを実装してください。
 タスクを順番に完了することに集中してください。
 タスクが完了したら、[x] を使用して完了マークを付けてください。
 各ステップが完了したら、タスクリストのマークとタスクの完了マーク [x] を更新することが非常に重要です。
 
 AWSのプロフェッショナルな視点で実装してください。
+
+補足：`npx cdk synth`を実行する必要がある場合、テスト使用する環境はprodなので、`npx cdk synth -c env=prod`で実行するようにしてください。
 
 ## 4.1 タスク実行の継続
 
