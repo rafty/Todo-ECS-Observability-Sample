@@ -37,6 +37,46 @@ flowchart LR
 デプロイ先の account/region は `infra/lib/config/environment-config.ts` で管理します。  
 実行前に、対象環境（例: `prod`）の値が意図した AWS アカウント/リージョンであることを確認してください。
 
+## 0.2 Datadog API Key Secret の事前作成
+
+- Secret 名は `/<environment>/<service>/datadog/api-key` 形式に統一します。
+  - 例: `/prod/todo-backend/datadog/api-key`
+- 値は `DD_API_KEY` のみを格納し、平文で Git 管理しません。
+- ローテーションは年1回以上の手動実施とし、責任者は当該 Secret へのアクセス権限を持つ担当者とします。
+
+```bash
+aws secretsmanager create-secret \
+  --name /prod/todo-backend/datadog/api-key \
+  --secret-string '<DATADOG_API_KEY>'
+```
+
+更新時:
+
+```bash
+aws secretsmanager put-secret-value \
+  --secret-id /prod/todo-backend/datadog/api-key \
+  --secret-string '<DATADOG_API_KEY>'
+```
+
+## 0.3 Datadog Application Key（任意: API 検証自動化時）
+
+Datadog API（Logs Search API など）で到達確認を自動化する場合は、Application Key も Secrets Manager に登録する。
+この Secret は CDK デプロイ時に自動注入されないため、検証スクリプトや手動確認で明示的に参照する。
+
+```bash
+aws secretsmanager create-secret \
+  --name /prod/todo-backend/datadog/app-key \
+  --secret-string '<DD_APPLICATION_KEY>'
+```
+
+更新時:
+
+```bash
+aws secretsmanager put-secret-value \
+  --secret-id /prod/todo-backend/datadog/app-key \
+  --secret-string '<DD_APPLICATION_KEY>'
+```
+
 ## 1. 初回のみ: CDK Bootstrap
 
 `infra/` で実行します。
@@ -53,7 +93,7 @@ npx cdk bootstrap aws://<account-id>/<region> -c env=prod
 
 ```bash
 cd frontend
-npm install
+npm ci
 npm run build
 ```
 
@@ -64,7 +104,7 @@ npm run build
 
 ```bash
 cd infra
-npm install
+npm ci
 npx cdk synth -c env=prod
 npx cdk diff -c env=prod
 ```
@@ -90,6 +130,22 @@ CloudFormation 出力（または `cdk deploy` の出力）で以下を確認し
 - CloudFront ドメインで SPA が表示される
 - Cognito Hosted UI でログインできる
 - ログイン後に `/api/*` 経路で Todo API が利用できる
+
+### 5.1 Datadog オブザーバビリティ確認
+
+- Logs Explorer: `service:todo-backend env:prod @trace_id:* @span_id:*`
+- Trace Explorer: `service:todo-backend env:prod`
+- Metrics Explorer:
+  - `sum:todo.operation.count{service:todo-backend,env:prod} by {operation,result}`
+  - `avg:todo.operation.duration{service:todo-backend,env:prod} by {operation,result}`
+- Error 追跡: `service:todo-backend env:prod status:error`
+- CloudWatch Logs の sidecar ロググループ（`log_router` / `datadog-agent`）保持日数が `prod=14日` であること
+
+### 5.2 Datadog 運用初期化チェック
+
+- Logs index / exclusion / retention / daily quota を初期値で作成済みであること
+- モニタ初期セット（error rate、latency p95/p99、Agent health、FireLens error、log volume anomaly）が有効化済みであること
+- ダッシュボード初期セット（service overview、latency/throughput/errors、ECS task health、APM trace volume）が作成済みであること
 
 ## 6. 代表的な失敗ケース
 

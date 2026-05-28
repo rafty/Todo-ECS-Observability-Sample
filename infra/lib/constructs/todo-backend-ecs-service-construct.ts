@@ -2,9 +2,11 @@ import * as cdk from 'aws-cdk-lib';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as ecr from 'aws-cdk-lib/aws-ecr';
 import * as ecs from 'aws-cdk-lib/aws-ecs';
+import * as iam from 'aws-cdk-lib/aws-iam';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import { Construct } from 'constructs';
+import { DatadogConfig } from '../config/environment-config';
 
 export type TodoBackendEcsServiceConstructProps = {
   vpc: ec2.IVpc;
@@ -12,6 +14,9 @@ export type TodoBackendEcsServiceConstructProps = {
   repository: ecr.IRepository;
   imageTag: string;
   databaseSecret: secretsmanager.ISecret;
+  datadogApiKeySecret: secretsmanager.ISecret;
+  datadogConfig: DatadogConfig;
+  environmentName: string;
   containerPort: number;
   desiredCount: number;
 };
@@ -30,24 +35,144 @@ export class TodoBackendEcsServiceConstruct extends Construct {
       clusterName: 'todo-backend-cluster',
     });
 
-    // なぜ必要か: タスクのCPU/メモリやIAM境界を固定し、実行定義を明確化するため。
+    // なぜ必要か: sidecar 分を含むタスクCPU/メモリを確保し、Fargate の有効な組み合わせ制約を満たすため。
     this.taskDefinition = new ecs.FargateTaskDefinition(this, 'TodoBackendTaskDefinition', {
-      cpu: 512,
-      memoryLimitMiB: 1024,
+      cpu: 1024,
+      memoryLimitMiB: 2048,
     });
 
-    // なぜ必要か: アプリログをCloudWatch Logsで集約し、起動/接続トラブルを追跡可能にするため。
-    const applicationLogGroup = new logs.LogGroup(this, 'TodoBackendLogGroup', {
-      retention: logs.RetentionDays.ONE_WEEK,
+    const datadogAgentLogRetention = props.datadogConfig.datadogAgentLogRetentionDays === 3
+      ? logs.RetentionDays.THREE_DAYS
+      : props.datadogConfig.datadogAgentLogRetentionDays === 7
+      ? logs.RetentionDays.ONE_WEEK
+      : logs.RetentionDays.TWO_WEEKS;
+    const logRouterLogRetention = props.datadogConfig.logRouterLogRetentionDays === 3
+      ? logs.RetentionDays.THREE_DAYS
+      : props.datadogConfig.logRouterLogRetentionDays === 7
+      ? logs.RetentionDays.ONE_WEEK
+      : logs.RetentionDays.TWO_WEEKS;
+
+    // なぜ必要か: datadog-agent の診断ログを環境別保持日数で保存し、障害時の切り分けを可能にするため。
+    const datadogAgentLogGroup = new logs.LogGroup(this, 'DatadogAgentLogGroup', {
+      retention: datadogAgentLogRetention,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+
+    // なぜ必要か: log_router の診断ログを環境別保持日数で保存し、ログ転送不具合を追跡可能にするため。
+    const logRouterLogGroup = new logs.LogGroup(this, 'LogRouterLogGroup', {
+      retention: logRouterLogRetention,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+
+    const firelensOptions: ecs.FirelensOptions =
+      props.datadogConfig.firelensConfigFileType && props.datadogConfig.firelensConfigFileValue
+        ? {
+            enableECSLogMetadata: true,
+            configFileType:
+              props.datadogConfig.firelensConfigFileType === 's3'
+                ? ecs.FirelensConfigFileType.S3
+                : ecs.FirelensConfigFileType.FILE,
+            configFileValue: props.datadogConfig.firelensConfigFileValue,
+          }
+        : {
+            enableECSLogMetadata: true,
+          };
+
+    // なぜ必要か: FireLens で Datadog 出力プラグインを有効化し、アプリログを Datadog Logs へ転送するため。
+    this.taskDefinition.addFirelensLogRouter('LogRouterContainer', {
+      image: ecs.ContainerImage.fromRegistry('public.ecr.aws/aws-observability/aws-for-fluent-bit:stable'),
+      cpu: props.datadogConfig.logRouter.cpu,
+      memoryReservationMiB: props.datadogConfig.logRouter.memoryReservationMiB,
+      memoryLimitMiB: props.datadogConfig.logRouter.memoryLimitMiB,
+      // なぜ必要か: CDK synth 時のコンテナ検証でポート未定義エラーを回避し、FireLens 標準受け口を明示するため。
+      portMappings: [
+        {
+          containerPort: 24224,
+          protocol: ecs.Protocol.TCP,
+        },
+      ],
+      firelensConfig: {
+        type: ecs.FirelensLogRouterType.FLUENTBIT,
+        options: firelensOptions,
+      },
+      logging: ecs.LogDrivers.awsLogs({
+        logGroup: logRouterLogGroup,
+        streamPrefix: `${props.environmentName}-log-router`,
+      }),
+    });
+
+    if (props.datadogConfig.firelensConfigFileType === 's3' && props.datadogConfig.firelensConfigFileValue) {
+      // なぜ必要か: S3 から Fluent Bit 設定ファイルを読み込む場合の最小権限をタスクロールへ付与するため。
+      const configBucketArn = props.datadogConfig.firelensConfigFileValue.replace(/\/[^/]+$/, '');
+      this.taskDefinition.taskRole.addToPrincipalPolicy(
+        new iam.PolicyStatement({
+          actions: ['s3:GetObject'],
+          resources: [props.datadogConfig.firelensConfigFileValue, `${configBucketArn}/*`],
+        }),
+      );
+    }
+
+    // なぜ必要か: app とは別コンテナで Datadog Agent を動かし、OTLP gRPC の受け口を提供するため。
+    this.taskDefinition.addContainer('DatadogAgentContainer', {
+      image: ecs.ContainerImage.fromRegistry('public.ecr.aws/datadog/agent:latest'),
+      cpu: props.datadogConfig.datadogAgent.cpu,
+      memoryReservationMiB: props.datadogConfig.datadogAgent.memoryReservationMiB,
+      memoryLimitMiB: props.datadogConfig.datadogAgent.memoryLimitMiB,
+      portMappings: [
+        {
+          containerPort: 4317,
+          protocol: ecs.Protocol.TCP,
+        },
+        // なぜ必要か: OTLP/HTTP で metrics を受ける 4318 を同一タスク内通信で利用できるよう明示するため。
+        {
+          containerPort: 4318,
+          protocol: ecs.Protocol.TCP,
+        },
+      ],
+      logging: ecs.LogDrivers.awsLogs({
+        logGroup: datadogAgentLogGroup,
+        streamPrefix: `${props.environmentName}-datadog-agent`,
+      }),
+      environment: {
+        ECS_FARGATE: 'true',
+        DD_APM_ENABLED: 'true',
+        DD_APM_NON_LOCAL_TRAFFIC: 'true',
+        // なぜ必要か: ECS/Fargate で task_arn などオーケストレーター粒度タグを付与し、Datadog 上の絞り込みを可能にするため。
+        DD_CHECKS_TAG_CARDINALITY: 'orchestrator',
+        DD_OTLP_CONFIG_RECEIVER_PROTOCOLS_GRPC_ENDPOINT: '0.0.0.0:4317',
+        // なぜ必要か: Micrometer OTLP metrics は HTTP 送信のため、Agent 側に OTLP/HTTP 受け口(4318)を有効化するため。
+        DD_OTLP_CONFIG_RECEIVER_PROTOCOLS_HTTP_ENDPOINT: '0.0.0.0:4318',
+        DD_SITE: props.datadogConfig.ddSite,
+        DD_ENV: props.environmentName,
+        DD_SERVICE: props.datadogConfig.ddService,
+        DD_VERSION: props.imageTag,
+        DD_TAGS: props.datadogConfig.ddTags,
+        DD_APM_MAX_TPS: String(props.datadogConfig.apmMaxTps),
+        DD_APM_ERROR_TPS: String(props.datadogConfig.apmErrorTps),
+      },
+      secrets: {
+        DD_API_KEY: ecs.Secret.fromSecretsManager(props.datadogApiKeySecret),
+      },
     });
 
     // なぜ必要か: ECRへ配布された指定タグのSpring BootイメージをFargateで実行するため。
     this.taskDefinition.addContainer('TodoBackendContainer', {
       image: ecs.ContainerImage.fromEcrRepository(props.repository, props.imageTag),
-      logging: ecs.LogDrivers.awsLogs({
-        logGroup: applicationLogGroup,
-        streamPrefix: 'todo-backend',
+      logging: ecs.LogDrivers.firelens({
+        options: {
+          Name: 'datadog',
+          Host: props.datadogConfig.firelensLogHost,
+          TLS: 'on',
+          compress: 'gzip',
+          provider: 'ecs',
+          dd_service: props.datadogConfig.ddService,
+          dd_source: 'java',
+          dd_tags: `env:${props.environmentName},version:${props.imageTag},${props.datadogConfig.ddTags}`,
+          dd_message_key: 'log',
+        },
+        secretOptions: {
+          apikey: ecs.Secret.fromSecretsManager(props.datadogApiKeySecret),
+        },
       }),
       portMappings: [
         {
@@ -58,6 +183,26 @@ export class TodoBackendEcsServiceConstruct extends Construct {
       environment: {
         // なぜ必要か: 認証導入前でもowner_subject入力方針を段階的に検証できるよう既定値を保持するため。
         TODO_OWNER_SUBJECT_DEFAULT: 'anonymous',
+        // なぜ必要か: Spring Boot 4 の OTLP trace exporter を明示有効化し、Datadog Agent へ span を送信するため。
+        MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_ENDPOINT: 'http://localhost:4317',
+        // なぜ必要か: traces 経路を OTLP/gRPC(4317) へ固定し、HTTP 既定値による未到達を防ぐため。
+        MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_TRANSPORT: 'grpc',
+        // なぜ必要か: Micrometer の OTLP metrics 送信先を Agent の OTLP/HTTP 受け口(4318)へ固定し、4317(gRPC)誤送信を防ぐため。
+        MANAGEMENT_OTLP_METRICS_EXPORT_URL: 'http://localhost:4318/v1/metrics',
+        // なぜ必要か: app から同一タスク内 Datadog Agent へ OTLP/gRPC 送信し、traces/metrics を集約するため。
+        OTEL_EXPORTER_OTLP_ENDPOINT: 'http://localhost:4317',
+        // なぜ必要か: 4317 は gRPC 受け口のため、プロトコルを明示して送信失敗を防ぐため。
+        OTEL_EXPORTER_OTLP_PROTOCOL: 'grpc',
+        // なぜ必要か: metrics のみ HTTP エンドポイントを個別指定し、OTEL_EXPORTER_OTLP_ENDPOINT(4317)の影響を切り離すため。
+        OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: 'http://localhost:4318/v1/metrics',
+        OTEL_TRACES_EXPORTER: 'otlp',
+        OTEL_METRICS_EXPORTER: 'otlp',
+        OTEL_LOGS_EXPORTER: 'none',
+        OTEL_SERVICE_NAME: props.datadogConfig.ddService,
+        OTEL_RESOURCE_ATTRIBUTES: `service.name=${props.datadogConfig.ddService},service.version=${props.imageTag},deployment.environment=${props.environmentName}`,
+        DD_SERVICE: props.datadogConfig.ddService,
+        DD_ENV: props.environmentName,
+        DD_VERSION: props.imageTag,
       },
       secrets: {
         // なぜ必要か: DB接続情報を平文環境変数に置かずSecrets Manager経由で渡すため。
@@ -73,10 +218,12 @@ export class TodoBackendEcsServiceConstruct extends Construct {
     if (this.taskDefinition.executionRole) {
       props.repository.grantPull(this.taskDefinition.executionRole);
       props.databaseSecret.grantRead(this.taskDefinition.executionRole);
+      props.datadogApiKeySecret.grantRead(this.taskDefinition.executionRole);
     }
 
     // なぜ必要か: アプリ実行時にDBシークレット参照が必要なため、タスクロールにも最小権限を付与する。
     props.databaseSecret.grantRead(this.taskDefinition.taskRole);
+    props.datadogApiKeySecret.grantRead(this.taskDefinition.taskRole);
 
     // なぜ必要か: ALB配下で稼働する常駐APIとしてFargateサービスをapplicationサブネットに配置するため。
     this.service = new ecs.FargateService(this, 'TodoBackendService', {

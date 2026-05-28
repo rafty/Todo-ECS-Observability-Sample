@@ -2,13 +2,14 @@
 
 - Status: Accepted
 - Date: 2026-05-22
+- Last Updated: 2026-05-28
 - Decision owner: TBD
 - Reviewers: TBD
 - Supersedes: N/A
 - Superseded by: N/A
-- Related specs: `specs/003-OTel-to-backend-fix-02/specs-draft.md`, `specs/004-Datadog-agent-to-cdk/specs-draft.md`
-- Related plan: N/A
-- Related tasks: N/A
+- Related specs: `specs/004-Datadog-agent-to-cdk/specs.md`
+- Related plan: `specs/004-Datadog-agent-to-cdk/plan.md`
+- Related tasks: `specs/004-Datadog-agent-to-cdk/tasks.md`
 
 ## 1. 背景
 
@@ -67,13 +68,15 @@ flowchart LR
   LOG[JSON Logs\ntrace_id/span_id/x_amzn_trace_id]
   FL[FireLens]
   DDLOG[Datadog Logs]
+  AG[Datadog Agent sidecar]
   DDAPM[Datadog APM]
 
   APP --> OTEL
   OTEL --> LOG
   LOG --> FL
   FL --> DDLOG
-  OTEL --> DDAPM
+  OTEL --> AG
+  AG --> DDAPM
 ```
 
 ## 6. 検討した代替案
@@ -143,7 +146,7 @@ Datadog tracer 由来のキーへ寄せる。
 - `RequestLoggingContextFilter` では `trace_id` / `span_id` を独自生成・上書きしない。
 - `X-Amzn-Trace-Id` は必要に応じて `x_amzn_trace_id` へ格納する。
 - `opentelemetry-logback-appender-1.0` を導入し、Spring 起動時に `OpenTelemetryAppender.install(openTelemetry)` を初期化する。
-- backend 側仕様は `specs/003-OTel-to-backend-fix-02/specs-draft.md` に反映し、infra 側 Datadog 設定は `specs/004-Datadog-agent-to-cdk/specs-draft.md` で管理する。
+- backend / infra 側仕様は `specs/004-Datadog-agent-to-cdk/specs.md` を正とし、実装変更時は本 ADR と `docs/infra/o11y.md` を同時更新する。
 
 ## 9. 運用方針
 

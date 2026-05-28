@@ -2,6 +2,7 @@ import * as cdk from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import { TodoAlbConstruct } from './constructs/todo-alb-construct';
 import { TodoAppSecurityGroupsConstruct } from './constructs/todo-app-security-groups-construct';
 import { TodoAuroraConstruct } from './constructs/todo-aurora-construct';
@@ -14,11 +15,13 @@ import { TodoTestDataCleanupLambdaConstruct } from './constructs/todo-test-data-
 import { BackendImageDeploymentConstruct } from './constructs/backend-image-deployment-construct';
 import { NetworkVpcConstruct } from './constructs/network-vpc-construct';
 import { TodoEcrRepositoryConstruct } from './constructs/todo-ecr-repository-construct';
+import { DatadogConfig } from './config/environment-config';
 
 export type InfraStackProps = cdk.StackProps & {
   environmentName: string;
   serviceName: string;
   version: string;
+  datadogConfig: DatadogConfig;
 };
 
 export class InfraStack extends cdk.Stack {
@@ -96,6 +99,15 @@ export class InfraStack extends cdk.Stack {
       repository: todoAppEcrRepository.repository,
       imageTag: backendImageDeployment.imageTag,
       databaseSecret: todoAuroraDatabase.databaseSecret,
+      // なぜ必要か: Datadog API Key を平文にせず Secrets Manager から sidecar へ注入するため。
+      datadogApiKeySecret: secretsmanager.Secret.fromSecretNameV2(
+        this,
+        'DatadogApiKeySecret',
+        props.datadogConfig.apiKeySecretName,
+      ),
+      // なぜ必要か: 環境差分を environment-config.ts に集約し、設定の散在を防ぐため。
+      datadogConfig: props.datadogConfig,
+      environmentName: props.environmentName,
       containerPort: applicationPort,
       desiredCount: 2,
     });
@@ -130,12 +142,13 @@ export class InfraStack extends cdk.Stack {
       domainPrefix: cognitoDomainPrefix,
     });
 
-    const backendDefaultContainer = todoBackendEcsService.taskDefinition.defaultContainer;
-    if (!backendDefaultContainer) {
-      throw new Error('TodoBackend のデフォルトコンテナが解決できません。タスク定義を確認してください。');
+    // なぜ必要か: FireLensコンテナを追加後は defaultContainer が LogRouter を指し得るため、JWT issuer は業務APIコンテナへ明示注入する必要があるため。
+    const todoBackendContainer = todoBackendEcsService.taskDefinition.findContainer('TodoBackendContainer');
+    if (!todoBackendContainer) {
+      throw new Error('TodoBackendContainer が解決できません。タスク定義を確認してください。');
     }
     // なぜ必要か: backend の JWT issuer 検証先をCognito実体に合わせ、/api 呼び出し時の401ループを防ぐため。
-    backendDefaultContainer.addEnvironment(
+    todoBackendContainer.addEnvironment(
       'SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI',
       todoCognitoAuth.issuerUrl,
     );

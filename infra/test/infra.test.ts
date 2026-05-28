@@ -9,6 +9,29 @@ test('Network, ECS, ALB, CloudFront, Cognito and Aurora resources are defined', 
     environmentName: 'prod',
     serviceName: 'Todo',
     version: '1.00',
+    datadogConfig: {
+      ddSite: 'datadoghq.com',
+      ddService: 'todo-backend',
+      ddTags: 'team:o11y-CoE,system:todo,aws_account:111111111111',
+      apiKeySecretName: '/prod/todo-backend/datadog/api-key',
+      firelensLogHost: 'http-intake.logs.datadoghq.com',
+      firelensConfigFileType: 'file',
+      firelensConfigFileValue: '/fluent-bit/etc/extra.conf',
+      datadogAgent: {
+        cpu: 256,
+        memoryLimitMiB: 512,
+        memoryReservationMiB: 256,
+      },
+      logRouter: {
+        cpu: 64,
+        memoryLimitMiB: 128,
+        memoryReservationMiB: 64,
+      },
+      datadogAgentLogRetentionDays: 14,
+      logRouterLogRetentionDays: 14,
+      apmMaxTps: 2,
+      apmErrorTps: 10,
+    },
   });
 
   const template = Template.fromStack(stack);

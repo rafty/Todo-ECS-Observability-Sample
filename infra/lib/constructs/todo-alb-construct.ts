@@ -37,7 +37,13 @@ export class TodoAlbConstruct extends Construct {
     // なぜ必要か: ヘルスチェックでタスク健全性を判定し、不健全タスクへの転送を避けるため。
     httpListener.addTargets('TodoBackendTargets', {
       port: props.containerPort,
-      targets: [props.service],
+      // なぜ必要か: 3コンテナ構成ではALBの登録先をappコンテナへ明示し、log_router誤登録を防ぐため。
+      targets: [
+        props.service.loadBalancerTarget({
+          containerName: 'TodoBackendContainer',
+          containerPort: props.containerPort,
+        }),
+      ],
       healthCheck: {
         path: props.healthCheckPath,
         healthyHttpCodes: '200-499',
