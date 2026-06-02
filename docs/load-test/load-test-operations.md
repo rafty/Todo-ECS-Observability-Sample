@@ -50,16 +50,16 @@ flowchart TD
 
 ## 0. 実行ディレクトリ
 
-最初にプロジェクトルートから `load-test/` へ移動します。
+最初にTerminalで、プロジェクトルートから `load-test/` へ移動します。
 
 ```bash
 cd load-test/
 ```
 
-以下のコマンドは、すべて `load-test/` ディレクトリで実行する前提です。
+以降のコマンドは、すべて `load-test/` ディレクトリで実行します。
 
-## 1. 変数設定
-
+## 1. 環境変数設定
+terminalで以下の環境変数を設定します。
 ```bash
 REGION="ap-northeast-1"
 STACK_NAME="InfraStack-prod"
@@ -77,7 +77,8 @@ K6_MAX_PAGE_SIZE=100
 (注1) `TodoAppCloudFrontDomainName`はCloudFormationのInfraStack-prodの出力を確認してください。
       例: d26esqfuca40la.cloudfront.net
 
-## 2. 負荷試験ユーザー作成（再実行可能）
+## 2. 負荷テストユーザー作成（再実行可能）
+`scripts/create_cognito_users.py`で、Todoアプリケーション用のテストユーザをCognito User Poolに作成します。
 
 ```bash
 LOAD_TEST_USER_PASSWORD="${FIXED_PASSWORD}" \
@@ -95,6 +96,7 @@ python3.13 scripts/create_cognito_users.py \
 - 毎回 `AdminSetUserPassword` を実行し、パスワード状態を整列します。
 
 ## 3. JWT 生成（`AdminInitiateAuth`）
+`scripts/generate_tokens.py`で、テストユーザのJWTを作成します。
 
 ```bash
 LOAD_TEST_USER_PASSWORD="${FIXED_PASSWORD}" \
@@ -113,7 +115,7 @@ python3.13 scripts/generate_tokens.py \
 - `tokens.json` は機密情報として扱い、不要になったら削除してください。
 
 ## 4. K6 設定ファイル生成（`config.json`）
-
+K6シナリオファイル`load-test/k6/scenarios/todo_api_scenario.js`が読み込む環境変数をconfig.jsonとして作成します。
 ```bash
 python3.13 scripts/create_k6_config.py \
   --base-url "${BASE_URL}" \
@@ -128,6 +130,7 @@ python3.13 scripts/create_k6_config.py \
 - `__ENV.BASE_URL` などの K6 環境変数を与えた場合は、`config.json` の値より環境変数を優先します。
 
 ## 5. （任意）ローカルスモーク実行
+K6のスモークテストを行う場合は以下を実行してください。
 
 ```bash
 k6 run k6/scenarios/todo_api_scenario.js \
@@ -140,7 +143,7 @@ k6 run k6/scenarios/todo_api_scenario.js \
 
 ## 6. DLT 提出用 ZIP 作成
 
-`load-test/k6`配下のjsとjsonがzip圧縮されます。
+`scripts/package_dlt_scenario.py`で`load-test/k6`配下のjsとjsonがzip圧縮します。
 ```text
 load-test
   └── k6
@@ -150,7 +153,6 @@ load-test
       └── scenarios
           └── todo_api_scenario.js
 ```
----
 
 ```bash
 python3.13 scripts/package_dlt_scenario.py \
