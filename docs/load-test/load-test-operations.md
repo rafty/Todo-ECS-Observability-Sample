@@ -74,8 +74,8 @@ K6_SLEEP_SECONDS=0.2
 K6_MAX_PAGE_SIZE=100
 ```
 
-(注1) `TodoAppCloudFrontDomainName`はCloudFormationのInfraStack-prodの出力を確認してください。
-      例: d26esqfuca40la.cloudfront.net
+(注1) `TodoAppCloudFrontDomainName`はCloudFormationのInfraStack-prodの出力を確認してください。  
+      例: d26esqfuca40la.cloudfront.net  
 
 ## 2. 負荷テストユーザー作成（再実行可能）
 `scripts/create_cognito_users.py`で、Todoアプリケーション用のテストユーザをCognito User Poolに作成します。
