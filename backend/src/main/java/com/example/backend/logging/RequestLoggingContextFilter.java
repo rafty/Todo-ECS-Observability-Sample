@@ -42,7 +42,6 @@ public class RequestLoggingContextFilter extends OncePerRequestFilter {
                     .setMessage("Request tracing context initialized")
                     .addKeyValue("eventType", "BUSINESS")
                     .addKeyValue("action", "REQUEST_CONTEXT")
-                    .addKeyValue("x_amzn_trace_id", xAmznTraceId)
                     .log();
         }
         response.setHeader(REQUEST_ID_HEADER, requestId);

@@ -33,7 +33,6 @@ public class ApiExceptionHandler {
                 .addKeyValue("eventType", "ERROR")
                 .addKeyValue("action", request.getMethod())
                 .addKeyValue("httpStatus", 404)
-                .addKeyValue("path", request.getRequestURI())
                 .log();
 
         return problemDetail;
@@ -53,7 +52,6 @@ public class ApiExceptionHandler {
                 .addKeyValue("eventType", "ERROR")
                 .addKeyValue("action", request.getMethod())
                 .addKeyValue("httpStatus", 400)
-                .addKeyValue("path", request.getRequestURI())
                 .log();
 
         return problemDetail;
@@ -83,7 +81,6 @@ public class ApiExceptionHandler {
                 .addKeyValue("eventType", "ERROR")
                 .addKeyValue("action", request.getMethod())
                 .addKeyValue("httpStatus", 400)
-                .addKeyValue("path", request.getRequestURI())
                 .addKeyValue("errorCount", fieldErrors.size())
                 .log();
 
@@ -107,7 +104,6 @@ public class ApiExceptionHandler {
                 .addKeyValue("eventType", "ERROR")
                 .addKeyValue("action", "UNHANDLED_EXCEPTION")
                 .addKeyValue("httpStatus", 500)
-                .addKeyValue("path", request.getRequestURI())
                 .setCause(exception)
                 .log();
 

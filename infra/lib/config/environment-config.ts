@@ -10,6 +10,8 @@ export type DatadogConfig = {
   ddSite: string;
   ddService: string;
   ddTags: string;
+  datadogAgentImage: string;
+  apmIgnoreResources: string;
   apiKeySecretName: string;
   firelensLogHost: string;
   firelensConfigFileType?: 'file' | 's3';
@@ -31,6 +33,8 @@ export type EnvironmentConfig = {
 
 const ddService = 'todo-backend';
 const ddSite = 'datadoghq.com';
+const datadogAgentImage = 'public.ecr.aws/datadog/agent:7.81.2';
+const apmIgnoreResources = '^GET /actuator/health(/.*)?$,^HEAD /actuator/health(/.*)?$';
 
 // なぜ必要か: Datadog Logs の送信先を DD_SITE に合わせて固定し、誤設定でのログ欠損を防ぐため。
 const firelensLogHostBySite: Record<string, string> = {
@@ -48,6 +52,10 @@ function buildDatadogConfig(environmentName: EnvironmentName, accountId: string)
     ddService,
     // なぜ必要か: Unified Service Tagging の拡張タグを環境ごとに統一し、service/env/version の重複定義を避けるため。
     ddTags: `team:o11y-CoE,system:todo,aws_account:${accountId}`,
+    // なぜ必要か: Datadog Agentをlatestで追随させず、OTLP ingestを検証する対象バージョンを固定するため。
+    datadogAgentImage,
+    // なぜ必要か: ALB health check由来traceをAPM ingest対象外にし、調査ノイズと取り込み量を抑えるため。
+    apmIgnoreResources,
     // なぜ必要か: 環境とサービスで一意な Secret 命名規約をコード化し、運用手順との不整合を防ぐため。
     apiKeySecretName: `/${environmentName}/${ddService}/datadog/api-key`,
     firelensLogHost,

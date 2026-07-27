@@ -114,7 +114,7 @@ export class TodoBackendEcsServiceConstruct extends Construct {
 
     // なぜ必要か: app とは別コンテナで Datadog Agent を動かし、OTLP gRPC の受け口を提供するため。
     this.taskDefinition.addContainer('DatadogAgentContainer', {
-      image: ecs.ContainerImage.fromRegistry('public.ecr.aws/datadog/agent:latest'),
+      image: ecs.ContainerImage.fromRegistry(props.datadogConfig.datadogAgentImage),
       cpu: props.datadogConfig.datadogAgent.cpu,
       memoryReservationMiB: props.datadogConfig.datadogAgent.memoryReservationMiB,
       memoryLimitMiB: props.datadogConfig.datadogAgent.memoryLimitMiB,
@@ -137,6 +137,8 @@ export class TodoBackendEcsServiceConstruct extends Construct {
         ECS_FARGATE: 'true',
         DD_APM_ENABLED: 'true',
         DD_APM_NON_LOCAL_TRAFFIC: 'true',
+        // なぜ必要か: health check由来traceをAPM ingest対象外にし、業務APIのtrace可読性とコストを守るため。
+        DD_APM_IGNORE_RESOURCES: props.datadogConfig.apmIgnoreResources,
         // なぜ必要か: ECS/Fargate で task_arn などオーケストレーター粒度タグを付与し、Datadog 上の絞り込みを可能にするため。
         DD_CHECKS_TAG_CARDINALITY: 'orchestrator',
         DD_OTLP_CONFIG_RECEIVER_PROTOCOLS_GRPC_ENDPOINT: '0.0.0.0:4317',
@@ -183,21 +185,29 @@ export class TodoBackendEcsServiceConstruct extends Construct {
       environment: {
         // なぜ必要か: 認証導入前でもowner_subject入力方針を段階的に検証できるよう既定値を保持するため。
         TODO_OWNER_SUBJECT_DEFAULT: 'anonymous',
-        // なぜ必要か: Spring Boot 4 の OTLP trace exporter を明示有効化し、Datadog Agent へ span を送信するため。
-        MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_ENDPOINT: 'http://localhost:4317',
-        // なぜ必要か: traces 経路を OTLP/gRPC(4317) へ固定し、HTTP 既定値による未到達を防ぐため。
-        MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_TRANSPORT: 'grpc',
-        // なぜ必要か: Micrometer の OTLP metrics 送信先を Agent の OTLP/HTTP 受け口(4318)へ固定し、4317(gRPC)誤送信を防ぐため。
-        MANAGEMENT_OTLP_METRICS_EXPORT_URL: 'http://localhost:4318/v1/metrics',
-        // なぜ必要か: app から同一タスク内 Datadog Agent へ OTLP/gRPC 送信し、traces/metrics を集約するため。
-        OTEL_EXPORTER_OTLP_ENDPOINT: 'http://localhost:4317',
-        // なぜ必要か: 4317 は gRPC 受け口のため、プロトコルを明示して送信失敗を防ぐため。
-        OTEL_EXPORTER_OTLP_PROTOCOL: 'grpc',
-        // なぜ必要か: metrics のみ HTTP エンドポイントを個別指定し、OTEL_EXPORTER_OTLP_ENDPOINT(4317)の影響を切り離すため。
-        OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: 'http://localhost:4318/v1/metrics',
+        // なぜ必要か: OpenTelemetry Java AgentをJVM起動時にattachし、Spring/JDBC/Runtimeを自動計装するため。
+        JAVA_TOOL_OPTIONS: '-javaagent:/app/opentelemetry-javaagent.jar',
         OTEL_TRACES_EXPORTER: 'otlp',
+        // なぜ必要か: traceは同一タスク内Datadog AgentのOTLP/gRPC受け口(4317)へ送信するため。
+        OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: 'http://localhost:4317',
+        // なぜ必要か: Java Agent 2.xの既定protocol差分に依存せず、trace経路をgRPCへ固定するため。
+        OTEL_EXPORTER_OTLP_TRACES_PROTOCOL: 'grpc',
         OTEL_METRICS_EXPORTER: 'otlp',
+        // なぜ必要か: metricsは同一タスク内Datadog AgentのOTLP/HTTP受け口(4318)へ送信するため。
+        OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: 'http://localhost:4318/v1/metrics',
+        // なぜ必要か: Datadog AgentのOTLP/HTTP metrics endpointへ正しいprotocolで送るため。
+        OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: 'http/protobuf',
+        // なぜ必要か: DatadogのOTLP metrics推奨に合わせ、counter系metricsの解釈を安定させるため。
+        OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: 'delta',
         OTEL_LOGS_EXPORTER: 'none',
+        // なぜ必要か: JDBC metricsを安定化したdatabase semantic conventionsで出力するため。
+        OTEL_SEMCONV_STABILITY_OPT_IN: 'database',
+        // なぜ必要か: 既存Micrometer業務metricsをJava Agent経由でDatadog Metricsへ送るため。
+        OTEL_INSTRUMENTATION_MICROMETER_ENABLED: 'true',
+        // なぜ必要か: Java Agent由来のJVM Runtime Metricsを明示的に有効化し、GC/CPU/ThreadをDatadogで確認するため。
+        OTEL_INSTRUMENTATION_RUNTIME_TELEMETRY_ENABLED: 'true',
+        // なぜ必要か: SQL bind parameter等の機密値がspan属性へ出る事故を防ぐため。
+        OTEL_INSTRUMENTATION_COMMON_DB_STATEMENT_SANITIZER_ENABLED: 'true',
         OTEL_SERVICE_NAME: props.datadogConfig.ddService,
         OTEL_RESOURCE_ATTRIBUTES: `service.name=${props.datadogConfig.ddService},service.version=${props.imageTag},deployment.environment=${props.environmentName}`,
         DD_SERVICE: props.datadogConfig.ddService,
