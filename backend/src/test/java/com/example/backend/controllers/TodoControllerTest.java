@@ -180,17 +180,17 @@ class TodoControllerTest {
     }
 
     @Test
-    void shouldIncludeTraceAndSpanIdsAsLowerHex(CapturedOutput output) throws Exception {
+    void shouldNotReintroduceLegacyTraceKeysWhenJavaAgentIsNotAttached(CapturedOutput output) throws Exception {
         mockMvc.perform(
                         get("/api/todos")
                                 .with(accessToken("owner-otel-correlation"))
                 )
                 .andExpect(status().isOk());
 
-        // なぜ必要か: Datadog相関の主キーとなるtrace_id/span_idがOTel形式（32/16小文字hex）で出力されることを固定するため。
+        // なぜ必要か: ローカルテストはJava Agent未attachのため、旧traceId/spanIdキーが復活していないことを最低限固定するため。
         assertThat(output.getOut())
-                .containsPattern("\"trace_id\":\"[0-9a-f]{32}\"")
-                .containsPattern("\"span_id\":\"[0-9a-f]{16}\"");
+                .doesNotContain("\"traceId\"")
+                .doesNotContain("\"spanId\"");
     }
 
     @Test

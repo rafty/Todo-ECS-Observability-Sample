@@ -2,13 +2,15 @@
 
 - Status: Accepted
 - Date: 2026-05-21
-- Last Updated: 2026-05-28
+- Last Updated: 2026-07-27
 - Decision owner: TBD
 - Reviewers: TBD
+- Superseded by: ADR-0003（詳細設定整理）、ADR-0004（trace / metrics export 主経路を OpenTelemetry Java Agent へ変更）
 - Related specs: `specs/004-Datadog-agent-to-cdk/specs.md`, `specs/004-Datadog-agent-to-cdk/plan.md`, `specs/004-Datadog-agent-to-cdk/tasks.md`
 - Related ADR:
   - `docs/adr/adr-0002-trace-correlation-otel-datadog.md`
   - `docs/adr/adr-0003-OTel-DatadogAgent-settings.md`
+  - `docs/adr/adr-0004-OTel-Java-Agent.md`
 - Related docs: `docs/infra/o11y.md`
 
 ## 1. 背景
@@ -23,6 +25,13 @@
 - `service/env/version` と `trace_id/span_id` を軸にした相関ルールの曖昧さ
 
 ## 2. 決定
+
+2026-07-27 時点の現行解釈:
+
+- logs を FireLens 経由で Datadog Logs へ送る方針は継続する。
+- app ログを CloudWatch Logs へ直接送らず、sidecar 診断ログだけを CloudWatch Logs へ送る方針は継続する。
+- trace / metrics の具体的な export 主経路は ADR-0004 により OpenTelemetry Java Agent へ置き換える。
+- 業務メトリクスのアプリ内 API は Micrometer API を維持し、Datadog への export は Java Agent Micrometer instrumentation を第一候補とする。
 
 ### 2.1 シグナル経路
 

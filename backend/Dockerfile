@@ -12,6 +12,17 @@ RUN mvn -B -q -DskipTests dependency:go-offline
 COPY src/ src/
 RUN mvn -B -DskipTests package
 
+# なぜ必要か: runtime起動時の外部downloadを避け、Java Agentの取得元とバージョンをDocker buildで固定するため。
+FROM maven:3.9-eclipse-temurin-21 AS otel-agent
+WORKDIR /otel-agent
+
+# なぜ必要か: OpenTelemetry Java Agentをlatestではなく明示バージョンで固定し、再現可能なimageを作るため。
+ARG OTEL_JAVA_AGENT_VERSION=2.30.0
+RUN mvn -B -q org.apache.maven.plugins:maven-dependency-plugin:3.8.1:copy \
+    -Dartifact=io.opentelemetry.javaagent:opentelemetry-javaagent:${OTEL_JAVA_AGENT_VERSION}:jar \
+    -DoutputDirectory=/otel-agent \
+    -Dmdep.stripVersion=true
+
 # なぜ必要か: 実行環境をAmazon Correttoに固定し、JDKとOS差分を減らすため。
 FROM amazoncorretto:21-alpine3.20
 WORKDIR /app
@@ -29,6 +40,9 @@ RUN addgroup -S spring \
 
 # なぜ必要か: ビルド済みJarのみを実行イメージに含め、不要ファイルを持ち込まないため。
 COPY --from=build --chown=spring:spring /workspace/target/*.jar /app/app.jar
+
+# なぜ必要か: ECSのJAVA_TOOL_OPTIONSから参照するJava Agentを非rootユーザーが読める形で同梱するため。
+COPY --from=otel-agent --chown=spring:spring /otel-agent/opentelemetry-javaagent.jar /app/opentelemetry-javaagent.jar
 
 # なぜ必要か: アプリ実行ユーザーを固定し、以降のプロセスを非rootで起動するため。
 USER spring:spring

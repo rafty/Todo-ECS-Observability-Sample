@@ -13,6 +13,8 @@ test('Network, ECS, ALB, CloudFront, Cognito and Aurora resources are defined', 
       ddSite: 'datadoghq.com',
       ddService: 'todo-backend',
       ddTags: 'team:o11y-CoE,system:todo,aws_account:111111111111',
+      datadogAgentImage: 'public.ecr.aws/datadog/agent:7.81.2',
+      apmIgnoreResources: '^GET /actuator/health(/.*)?$,^HEAD /actuator/health(/.*)?$',
       apiKeySecretName: '/prod/todo-backend/datadog/api-key',
       firelensLogHost: 'http-intake.logs.datadoghq.com',
       firelensConfigFileType: 'file',
@@ -99,6 +101,31 @@ test('Network, ECS, ALB, CloudFront, Cognito and Aurora resources are defined', 
     ]),
   });
   expect(JSON.stringify(template.toJSON())).not.toContain(':latest');
+
+  const templateJson = JSON.stringify(template.toJSON());
+
+  // なぜ必要か: OpenTelemetry Java Agentのattachとsignal別OTLP設定がECS task definitionに反映されることを担保するため。
+  expect(templateJson).toContain('"Name":"TodoBackendContainer"');
+  expect(templateJson).toContain('"Name":"JAVA_TOOL_OPTIONS","Value":"-javaagent:/app/opentelemetry-javaagent.jar"');
+  expect(templateJson).toContain('"Name":"OTEL_EXPORTER_OTLP_TRACES_ENDPOINT","Value":"http://localhost:4317"');
+  expect(templateJson).toContain('"Name":"OTEL_EXPORTER_OTLP_TRACES_PROTOCOL","Value":"grpc"');
+  expect(templateJson).toContain('"Name":"OTEL_EXPORTER_OTLP_METRICS_ENDPOINT","Value":"http://localhost:4318/v1/metrics"');
+  expect(templateJson).toContain('"Name":"OTEL_EXPORTER_OTLP_METRICS_PROTOCOL","Value":"http/protobuf"');
+  expect(templateJson).toContain('"Name":"OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE","Value":"delta"');
+  expect(templateJson).toContain('"Name":"OTEL_INSTRUMENTATION_MICROMETER_ENABLED","Value":"true"');
+  expect(templateJson).toContain('"Name":"OTEL_SEMCONV_STABILITY_OPT_IN","Value":"database"');
+
+  // なぜ必要か: Datadog Agentの明示バージョン固定とhealth check trace除外が維持されることを担保するため。
+  expect(templateJson).toContain('"Name":"DatadogAgentContainer"');
+  expect(templateJson).toContain('"Image":"public.ecr.aws/datadog/agent:7.81.2"');
+  expect(templateJson).toContain('"Name":"DD_APM_IGNORE_RESOURCES","Value":"^GET /actuator/health(/.*)?$,^HEAD /actuator/health(/.*)?$"');
+  expect(templateJson).toContain('"Name":"DD_OTLP_CONFIG_RECEIVER_PROTOCOLS_GRPC_ENDPOINT","Value":"0.0.0.0:4317"');
+  expect(templateJson).toContain('"Name":"DD_OTLP_CONFIG_RECEIVER_PROTOCOLS_HTTP_ENDPOINT","Value":"0.0.0.0:4318"');
+
+  // なぜ必要か: Spring Boot OTel starter前提のmanagement系OTLP変数を再導入しないことを担保するため。
+  expect(templateJson).not.toContain('MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_ENDPOINT');
+  expect(templateJson).not.toContain('MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_TRANSPORT');
+  expect(templateJson).not.toContain('MANAGEMENT_OTLP_METRICS_EXPORT_URL');
 
   // なぜ必要か: 手動実行のTodo掃除LambdaがPython 3.13で定義され、入力制御用環境変数を持つことを担保するため。
   template.hasResourceProperties('AWS::Lambda::Function', {

@@ -2,11 +2,11 @@
 
 - Status: Accepted
 - Date: 2026-05-22
-- Last Updated: 2026-05-28
+- Last Updated: 2026-07-27
 - Decision owner: TBD
 - Reviewers: TBD
 - Supersedes: N/A
-- Superseded by: N/A
+- Superseded by: ADR-0004 の Java Agent Logback MDC instrumentation 方針により、`opentelemetry-logback-appender-1.0` 初期化実装は置き換え
 - Related specs: `specs/004-Datadog-agent-to-cdk/specs.md`
 - Related plan: `specs/004-Datadog-agent-to-cdk/plan.md`
 - Related tasks: `specs/004-Datadog-agent-to-cdk/tasks.md`
@@ -142,11 +142,11 @@ Datadog tracer 由来のキーへ寄せる。
 
 ## 8. 実装方針
 
-- Spring Boot / Logback では OTel の MDC 自動注入または OTel Logback Appender を使用し、`trace_id` / `span_id` を JSON へ出力する。
+- Spring Boot / Logback では OpenTelemetry Java Agent の Logback MDC instrumentation を第一候補として、`trace_id` / `span_id` を JSON へ出力する。
 - `RequestLoggingContextFilter` では `trace_id` / `span_id` を独自生成・上書きしない。
 - `X-Amzn-Trace-Id` は必要に応じて `x_amzn_trace_id` へ格納する。
-- `opentelemetry-logback-appender-1.0` を導入し、Spring 起動時に `OpenTelemetryAppender.install(openTelemetry)` を初期化する。
-- backend / infra 側仕様は `specs/004-Datadog-agent-to-cdk/specs.md` を正とし、実装変更時は本 ADR と `docs/infra/o11y.md` を同時更新する。
+- `opentelemetry-logback-appender-1.0` と `OpenTelemetryAppender.install(openTelemetry)` の明示初期化は、Java Agent との二重ログ相関を避けるため削除する。
+- backend / infra 側の現行仕様は `docs/infra/o11y.md`、`docs/backend/logging.md`、ADR-0004 を正とし、実装変更時は同時更新する。
 
 ## 9. 運用方針
 
