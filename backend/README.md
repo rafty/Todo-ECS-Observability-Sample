@@ -126,7 +126,7 @@ Java Agent は HTTP server / Spring Web MVC / JDBC などの framework / library
 
 - [docs 全体入口](../docs/README.md)
 - [backend ドキュメント入口](../docs/backend/README.md)
-- [backend ログ設計](../docs/backend/logging.md)
+- [backend ログ / 業務テレメトリ設計](../docs/backend/logging.md)
 - [Observability 仕様](../docs/infra/o11y.md)
 - [backend 開発手順](../docs/development/backend-development.md)
 - [ADR-0004: APMエージェントの選定](../docs/adr/adr-0004-OTel-Java-Agent.md)

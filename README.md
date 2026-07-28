@@ -9,15 +9,35 @@ flowchart LR
   U[Browser] --> CF[CloudFront]
   CF -->|default| S3[S3 Frontend]
   CF -->|/api/*| ALB[ALB]
-  ALB --> ECS[ECS Fargate Spring Boot]
-  ECS --> DB[(Aurora PostgreSQL)]
-  ECS --> SM[Secrets Manager]
-  ECS --> FL[FireLens]
-  ECS --> AG[Datadog Agent]
-  FL --> DDLOG[Datadog Logs]
-  AG --> DDAPM[Datadog APM/Metrics]
   U --> COG[Cognito Hosted UI]
+
+  subgraph TASK[ECS Fargate Task]
+    APP["TodoBackendContainer\nSpring Boot + OpenTelemetry Java Agent"]
+    FL["LogRouterContainer\nFireLens / Fluent Bit"]
+    AG["DatadogAgentContainer\nOTLP Receiver"]
+  end
+
+  ALB --> APP
+  APP --> DB[(Aurora PostgreSQL)]
+  APP --> SM[Secrets Manager]
+  APP -->|stdout / stderr JSON logs| FL
+  APP -->|OTLP traces gRPC 4317| AG
+  APP -->|OTLP metrics HTTP 4318| AG
+  FL -->|Datadog Logs output| DDLOG[Datadog Logs]
+  AG -->|traces| DDAPM[Datadog APM]
+  AG -->|metrics| DDMET[Datadog Metrics]
+  FL -->|sidecar diagnostics| CW[CloudWatch Logs]
+  AG -->|sidecar diagnostics| CW
 ```
+
+このサンプルでは Datadog を `logs / traces / metrics` の主な調査画面にし、CloudWatch Logs は ECS task 内 sidecar の診断ログを短期保持する用途に限定します。`TodoBackendContainer` のアプリログは `awsfirelens` で FireLens に渡すため、CloudWatch Logs へ直接は出力しません。
+
+O11y コンポーネントは責務を分けています。
+
+- `OpenTelemetry Java Agent`: アプリ JVM に attach し、Spring Web MVC / JDBC / JVM Runtime / Micrometer を自動計装して traces / metrics を生成する。ログ配送は担当しない。
+- `DatadogAgentContainer`: 同一 ECS task 内で OTLP receiver として動作し、Java Agent から受けた traces / metrics を Datadog APM / Metrics へ送る。
+- `LogRouterContainer`（FireLens / Fluent Bit）: アプリの stdout / stderr JSON ログを Datadog Logs へ送る。ログ配送を trace / metrics 経路から分離し、OTLP logs は使わない。
+- `CloudWatch Logs`: `log_router` / `datadog-agent` の内部ログ、転送エラー、OTLP 受信/送信エラーの確認先。ECS Service / Task の状態変化は ECS の control plane 側イベントとして扱い、アプリログの保管先とは分ける。
 
 ## 最初に読むドキュメント
 
@@ -29,6 +49,7 @@ flowchart LR
    - [infra/README.md](./infra/README.md)
 4. Observability 仕様:
    - [docs/infra/o11y.md](./docs/infra/o11y.md)
+   - [docs/backend/logging.md](./docs/backend/logging.md)
    - [docs/adr/](./docs/adr/)
 5. 負荷テスト関連:
    - [DLT デプロイ手順](./docs/load-test/load-test-deployment.md)
@@ -89,3 +110,4 @@ CloudFormation 出力 `TodoAppCloudFrontDomainName` を確認し、`https://<Tod
 - [ADR-0001: ECS Fargate 上の Spring Boot アプリにおける Datadog / OpenTelemetry / ログ収集方式](./docs/adr/adr-0001-o11y-datadog-otel-ecs-fargate.md)
 - [ADR-0002: OpenTelemetry `trace_id` / `span_id` を正とする Datadog ログ相関方式](./docs/adr/adr-0002-trace-correlation-otel-datadog.md)
 - [ADR-0003: Datadog Agent / FireLens / Spring Boot O11y 設定方針](./docs/adr/adr-0003-OTel-DatadogAgent-settings.md)
+- [ADR-0004: APMエージェントの選定（OpenTelemetry Java Agent）](./docs/adr/adr-0004-OTel-Java-Agent.md)

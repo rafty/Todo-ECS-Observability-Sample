@@ -2,7 +2,7 @@
 
 - Status: Accepted（ADR-0004 により trace / metrics export 方針は一部 superseded）
 - Date: 2026-05-28
-- Last Updated: 2026-07-27
+- Last Updated: 2026-07-28
 - Decision owner: TBD
 - Reviewers: TBD
 - Supersedes: N/A
@@ -133,10 +133,11 @@ ADR-0003 初版では、trace は Spring Boot OTel exporter、metrics は Microm
 
 ## 9. 確認事項
 
-- `todo.operation.*` が Java Agent Micrometer instrumentation 経由で Datadog Metrics に届くかは canary deploy 後に確認する。
-- Java Agent Logback MDC instrumentation だけで JSON ログトップレベルに `trace_id` / `span_id` が出るかは canary deploy 後に確認する。
-- Runtime Metrics と既存 Micrometer JVM metrics の重複有無は Datadog 上で確認する。
-- `DD_APM_IGNORE_RESOURCES` の regex が `/actuator/health` だけを除外し、業務 API を除外していないことを canary で確認する。
+- 確認済み: `todo.operation.*` は Java Agent Micrometer instrumentation 経由で Datadog Metrics に到達する。
+- 確認済み: Java Agent Logback MDC instrumentation により JSON ログトップレベルに `trace_id` / `span_id` が出る。
+- 確認済み: JDBC / HikariCP / Runtime Metrics は Datadog Metrics API で確認できる。
+- 確認済み: `DD_APM_IGNORE_RESOURCES` は `/actuator/health` を除外し、`/api/todos` や JDBC span を除外していない。
+- 継続確認: Runtime Metrics と既存 Micrometer JVM metrics の重複が運用ダッシュボード上で問題になる場合は、採用系列を整理する。
 
 ## 10. 参考資料
 

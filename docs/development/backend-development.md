@@ -49,29 +49,39 @@ curl -i http://localhost:8080/actuator/health
 
 - `SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI`
 
-### O11y（Datadog / OpenTelemetry / Micrometer）
+### O11y（Datadog / OpenTelemetry Java Agent / Micrometer）
 
 - `DD_SERVICE`（固定: `todo-backend`）
 - `DD_ENV`（`dev` / `stg` / `prod`）
 - `DD_VERSION`（`DockerImageAsset.imageTag` 由来）
-- `MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_ENDPOINT`（既定: `http://localhost:4317`）
-- `MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_TRANSPORT`（既定: `grpc`）
-- `MANAGEMENT_OTLP_METRICS_EXPORT_URL`（既定: `http://localhost:4318/v1/metrics`）
+- `JAVA_TOOL_OPTIONS`（ECS 既定: `-javaagent:/app/opentelemetry-javaagent.jar`）
+- `OTEL_TRACES_EXPORTER`
+- `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`
+- `OTEL_EXPORTER_OTLP_TRACES_PROTOCOL`
+- `OTEL_METRICS_EXPORTER`
+- `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT`
+- `OTEL_EXPORTER_OTLP_METRICS_PROTOCOL`
+- `OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE`
+- `OTEL_LOGS_EXPORTER`（ECS 既定: `none`）
+- `OTEL_SEMCONV_STABILITY_OPT_IN`
+- `OTEL_INSTRUMENTATION_MICROMETER_ENABLED`
+- `OTEL_INSTRUMENTATION_RUNTIME_TELEMETRY_ENABLED`
+- `OTEL_INSTRUMENTATION_COMMON_DB_STATEMENT_SANITIZER_ENABLED`
 - `OTEL_SERVICE_NAME`
 - `OTEL_RESOURCE_ATTRIBUTES`
-- `OTEL_EXPORTER_OTLP_ENDPOINT`
-- `OTEL_EXPORTER_OTLP_PROTOCOL`
-- `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT`
-- `OTEL_TRACES_EXPORTER`
-- `OTEL_METRICS_EXPORTER`
-- `OTEL_LOGS_EXPORTER`
+
+`MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_*`、`MANAGEMENT_OTLP_METRICS_EXPORT_URL`、generic `OTEL_EXPORTER_OTLP_ENDPOINT` / `OTEL_EXPORTER_OTLP_PROTOCOL` は、Java Agent 導入後の ECS task definition では使わない。
 
 ## O11y 方針（実装準拠）
 
 - logs: `SLF4J + Logback(JSON)` を stdout へ出力し、ECS では FireLens が Datadog Logs へ転送する。
-- metrics: `BusinessMetricsService` は Micrometer API を使い、`todo.operation.count` / `todo.operation.duration` を送信する。
-- trace: OTel tracer（AOP 計装）で span を作成し、OTLP/gRPC（4317）で送信する。
+- traces: OpenTelemetry Java Agent が HTTP / Spring / JDBC などを自動計装し、OTLP/gRPC（4317）で Datadog Agent sidecar へ送信する。
+- business traces: `TodoOperationTelemetryAspect` が `TodoServiceImpl` の Todo 操作だけを OpenTelemetry API で手動 span 化する。
+- metrics: OpenTelemetry Java Agent が JDBC / Runtime / Micrometer metrics を OTLP/HTTP（4318）で Datadog Agent sidecar へ送信する。
+- business metrics: `BusinessMetricsService` は Micrometer API を使い、`todo.operation.count` / `todo.operation.duration` を記録する。
 - `trace_id` / `span_id` がログ相関の主キーで、`x_amzn_trace_id` は補助キー。
+
+ローカルの `mvn spring-boot:run` は既定では `opentelemetry-javaagent.jar` を attach しないため、Java Agent 自動計装、Logback MDC instrumentation、Datadog 送信の最終確認には Docker image / ECS 相当の起動条件が必要である。ローカルテストでは、旧 `traceId` / `spanId` キーが復活しないことや、AOP 対象 operation が限定されていることを主に固定する。
 
 ## テスト環境と実行環境の差分
 
@@ -97,6 +107,6 @@ curl -i http://localhost:8080/actuator/health
 ## 関連
 
 - [backend 入口 README](../../backend/README.md)
-- [backend ログ設計](../backend/logging.md)
+- [backend ログ / 業務テレメトリ設計](../backend/logging.md)
 - [AWS デプロイ手順（Monorepo 全体）](./aws-deployment-manual.md)
 - [O11y 仕様（infra）](../infra/o11y.md)

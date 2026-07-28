@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-06-04
-- Last Updated: 2026-07-27
+- Last Updated: 2026-07-28
 - Decision owner: TBD
 - Reviewers: TBD
 - Supersedes: ADR-0003 の Spring Boot OTel starter / Micrometer OTLP Registry を trace / metrics export 主経路とする前提
@@ -140,7 +140,7 @@ Micrometer instrumentation で期待どおり export できない場合のみ、
 - OpenTelemetry semantic conventions と Datadog のタグ命名規則の差異は、Datadog Agent の OTLP 変換に依存する。カスタム属性の最終表示は canary で確認する。
 - Java Agent 導入により app JVM の startup time、CPU、memory、span / metrics 量が増える可能性がある。
 - `/actuator/health` 由来 trace は `DD_APM_IGNORE_RESOURCES` で除外するが、Datadog APM 上の resource 名と regex の一致は canary で確認する。
-- Datadog UI 上の JDBC metrics、Runtime Metrics、HikariCP metrics の最終 metric 名は実環境確認後に記録する。
+- Datadog UI 上の表示名は環境・Agent バージョン・OTLP mapping に依存する。実環境で確認済みの metric API 名は `docs/infra/o11y.md` に記録する。
 
 ## 7. 代替案の再評価トリガー
 

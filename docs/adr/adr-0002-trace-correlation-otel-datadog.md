@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-05-22
-- Last Updated: 2026-07-27
+- Last Updated: 2026-07-28
 - Decision owner: TBD
 - Reviewers: TBD
 - Supersedes: N/A
@@ -168,12 +168,12 @@ Datadog tracer 由来のキーへ寄せる。
 
 ## 12. 採用基準 / 完了条件
 
-- [ ] backend ログに `trace_id` / `span_id` がトップレベルで出力される。
-- [ ] `trace_id` が 32 文字小文字 hex、`span_id` が 16 文字小文字 hex である。
-- [ ] `traceId` キー名が新規仕様で使われていない。
+- [x] backend ログに `trace_id` / `span_id` がトップレベルで出力される。
+- [x] `trace_id` が 32 文字小文字 hex、`span_id` が 16 文字小文字 hex である。
+- [x] `traceId` キー名が新規仕様で使われていない。
 - [ ] Datadog で Trace ↔ Logs の双方向遷移ができる。
-- [ ] `service` / `env` / `version` が logs/traces で一致する。
-- [ ] `team` / `aws_account` / `system` が logs/traces/metrics に付与されている。
+- [x] `service` / `env` / `version` が logs/traces で一致するよう app / FireLens / Datadog Agent に設定されている。
+- [x] `team` / `aws_account` / `system` が logs/traces/metrics に付与されるよう FireLens / Datadog Agent に設定されている。
 
 ## 13. ロールバック / 変更方針
 
