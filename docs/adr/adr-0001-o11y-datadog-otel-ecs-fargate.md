@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-05-21
-- Last Updated: 2026-07-27
+- Last Updated: 2026-07-28
 - Decision owner: TBD
 - Reviewers: TBD
 - Superseded by: ADR-0003（詳細設定整理）、ADR-0004（trace / metrics export 主経路を OpenTelemetry Java Agent へ変更）
@@ -38,8 +38,8 @@
 | Signal | アプリ側実装 | タスク内経路 | Datadog 送信先 | 備考 |
 | --- | --- | --- | --- | --- |
 | logs | SLF4J + Logback(JSON) | `TodoBackendContainer (awsfirelens)` -> `LogRouterContainer` | Datadog Logs | アプリログは CloudWatch Logs へ直接送信しない |
-| metrics | Micrometer API (`MeterRegistry`) | OTLP/HTTP `http://localhost:4318/v1/metrics` -> `DatadogAgentContainer` | Datadog Metrics | `todo.operation.count`, `todo.operation.duration` |
-| traces / span events | OTel tracer (`spring-boot-starter-opentelemetry`) | OTLP/gRPC `http://localhost:4317` -> `DatadogAgentContainer` | Datadog APM | span event は trace の一部として扱う |
+| metrics | OpenTelemetry Java Agent + Micrometer API (`MeterRegistry`) | OTLP/HTTP `http://localhost:4318/v1/metrics` -> `DatadogAgentContainer` | Datadog Metrics | Java Agent の Runtime / JDBC / Micrometer instrumentation。`todo.operation.count`, `todo.operation.duration` は Micrometer API で記録 |
+| traces / span events | OpenTelemetry Java Agent + OpenTelemetry API | OTLP/gRPC `http://localhost:4317` -> `DatadogAgentContainer` | Datadog APM | framework / library span は Java Agent、Todo 業務 span は `TodoOperationTelemetryAspect` に限定 |
 | OTel logs | 使用しない | `OTEL_LOGS_EXPORTER=none` | なし | 予期しない二重課金を避ける |
 
 ### 2.2 ECS タスク構成
@@ -54,8 +54,8 @@ CloudWatch Logs は「アプリ本体ログの主保管先」ではなく、「s
 
 ### 2.3 API 方針（Spring Boot 側）
 
-- trace: OTel exporter を使用し、OTLP/gRPC（4317）で Agent へ送る。
-- metrics: Micrometer OTLP Registry を使用し、OTLP/HTTP（4318）で Agent へ送る。
+- trace: OpenTelemetry Java Agent の OTLP exporter を使用し、OTLP/gRPC（4317）で Agent へ送る。Java Agent が自動生成しない Todo 業務 span だけ OpenTelemetry API で補う。
+- metrics: OpenTelemetry Java Agent の OTLP metrics exporter を使用し、OTLP/HTTP（4318）で Agent へ送る。業務 metrics は Micrometer API で記録し、Java Agent Micrometer instrumentation 経由で export する。
 - logs: OTel Logs exporter は無効（`OTEL_LOGS_EXPORTER=none`）、アプリログは FireLens 経路に統一する。
 - 業務メトリクスは Micrometer API に統一し、OTel Metrics API と二重運用しない。
 
@@ -75,15 +75,19 @@ CloudWatch Logs は「アプリ本体ログの主保管先」ではなく、「s
 
 ### 3.1 TodoBackendContainer（主要な O11y 変数）
 
-- `MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_ENDPOINT=http://localhost:4317`
-- `MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_TRANSPORT=grpc`
-- `MANAGEMENT_OTLP_METRICS_EXPORT_URL=http://localhost:4318/v1/metrics`
-- `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317`
-- `OTEL_EXPORTER_OTLP_PROTOCOL=grpc`
-- `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT=http://localhost:4318/v1/metrics`
+- `JAVA_TOOL_OPTIONS=-javaagent:/app/opentelemetry-javaagent.jar`
 - `OTEL_TRACES_EXPORTER=otlp`
+- `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://localhost:4317`
+- `OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=grpc`
 - `OTEL_METRICS_EXPORTER=otlp`
+- `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT=http://localhost:4318/v1/metrics`
+- `OTEL_EXPORTER_OTLP_METRICS_PROTOCOL=http/protobuf`
+- `OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE=delta`
 - `OTEL_LOGS_EXPORTER=none`
+- `OTEL_SEMCONV_STABILITY_OPT_IN=database`
+- `OTEL_INSTRUMENTATION_MICROMETER_ENABLED=true`
+- `OTEL_INSTRUMENTATION_RUNTIME_TELEMETRY_ENABLED=true`
+- `OTEL_INSTRUMENTATION_COMMON_DB_STATEMENT_SANITIZER_ENABLED=true`
 - `OTEL_SERVICE_NAME=todo-backend`
 - `OTEL_RESOURCE_ATTRIBUTES=service.name=todo-backend,service.version=<imageTag>,deployment.environment=<env>`
 - `DD_SERVICE=todo-backend`
@@ -128,9 +132,10 @@ CloudWatch Logs は「アプリ本体ログの主保管先」ではなく、「s
 
 ### 6.2 注意点
 
-- Micrometer OTLP Registry は既定で HTTP 送信のため、metrics を gRPC に統一したい場合は別途 `OtlpMetricsSender` 実装が必要。
+- metrics は Java Agent から OTLP/HTTP（4318）へ送るため、trace の OTLP/gRPC（4317）と endpoint / protocol を混同しない。
 - FireLens 障害時は app ログが Datadog に到達しないため、`LogRouterContainer` の CloudWatch Logs を一次調査点にする。
 - Agent 側受け口の 4317/4318 設定ミスは、metrics/traces の欠損を起こす。
+- Java Agent 導入により app JVM の startup time、CPU、memory、span / metrics 量が増える可能性がある。
 
 ## 7. 参考資料
 
