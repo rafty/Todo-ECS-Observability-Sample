@@ -7,34 +7,46 @@
 - OpenTelemetry Java Agent 導入後も `trace_id` / `span_id` を主相関キーとして維持する。
 - `src/main/java/com/example/backend/logging` と `src/main/java/com/example/backend/telemetry` の責務を明確にし、自動計装と手動計装の境界を誤解しないようにする。
 
-## まず押さえる境界
+## ログとテレメトリの役割分担
 
-`OpenTelemetry Java Agent` は ECS 上の JVM 起動時に `JAVA_TOOL_OPTIONS=-javaagent:/app/opentelemetry-javaagent.jar` で attach され、HTTP / Spring / JDBC / Runtime / Micrometer などを自動計装する。これはアプリケーションコードの外側で動くため、`src/main/java/com/example/backend/telemetry` に自動計装そのものの実装はない。
+この backend では、ログ出力、trace/span、metrics を次のように分けている。理由は、調査で見る情報の粒度と使い方がそれぞれ違うためである。
 
-`src/main/java/com/example/backend/telemetry` は、Java Agent が自動生成しない Todo 業務単位の span と、アプリコードが明示的に記録する業務 metrics を扱う。つまり、このパッケージは「自動計装の実装」ではなく「Java Agent が用意した OpenTelemetry / Micrometer の実行基盤に乗せる手動業務計装」である。
+- ログ出力は、特定のリクエストや業務イベントで「何が起きたか」を人間が読むために使う。
+- trace/span は、1つのリクエストが HTTP、Service、JDBC などをどう通ったかを追うために使う。
+- metrics は、成功/失敗件数、処理時間、JVM 状態などを集計し、傾向や異常を検知するために使う。
 
-| Signal | 自動/手動 | 主な実装場所 | Datadog への経路 | この文書で見る観点 |
+この違いを曖昧にすると、ログへ不要な集計情報を詰め込んだり、metrics に高カーディナリティな値を入れたり、Java Agent の自動計装とアプリ側の手動計装を重複させたりしやすい。そのため、役割を分けて記載する。
+
+- ログ出力: アプリコードが SLF4J で出力し、Spring Boot が JSON 化する。
+- 自動計装: OpenTelemetry Java Agent が HTTP / Spring / JDBC / Runtime / Micrometer などを取得する。
+- 手動計装: `src/main/java/com/example/backend/telemetry` が Todo 業務操作の span と metrics だけを補う。
+
+| 対象 | 自動計装/手動計装/ログ出力 | 実装・設定 | Datadog への経路 | データの作り方 |
 | --- | --- | --- | --- | --- |
-| アプリログ | 手動ログ出力 + Spring Boot 構造化ログ | `logging`、`TodoController`、`TodoServiceImpl`、`application.properties` | stdout -> FireLens -> Datadog Logs | JSON キー、MDC、監査ログ、機密情報非出力 |
-| Trace / Span（自動計装） | 自動 | OpenTelemetry Java Agent。repo 内では `Dockerfile` と ECS task definition の環境変数で attach / export を設定 | OTLP/gRPC 4317 -> Datadog Agent -> Datadog APM | backend コードでは独自実装しない。詳細は `docs/infra/o11y.md` |
-| Trace / Span（業務/手動計装） | 手動 | `telemetry/TodoOperationTelemetryAspect.java`、`telemetry/TodoOperationSpanService.java` | OTLP/gRPC 4317 -> Datadog Agent -> Datadog APM | Todo 操作だけを低カーディナリティ span として補う |
-| Metrics（JDBC / Runtime など） | 自動 | OpenTelemetry Java Agent | OTLP/HTTP 4318 -> Datadog Agent -> Datadog Metrics | backend コードでは独自実装しない。詳細は `docs/infra/o11y.md` |
-| 業務 metrics | 手動記録 + Java Agent export | `telemetry/BusinessMetricsService.java` | Micrometer -> Java Agent -> OTLP/HTTP 4318 -> Datadog Agent -> Datadog Metrics | `todo.operation.*` を Micrometer API で記録する |
+| アプリログ | ログ出力 | `logging`、`TodoController`、`TodoServiceImpl`、`application.properties` | stdout -> FireLens -> Datadog Logs | SLF4J で出力し、Spring Boot 構造化ログで JSON 化する |
+| HTTP / Spring / JDBC の trace/span | 自動計装 | `Dockerfile` で Java Agent を同梱し、ECS task definition の `JAVA_TOOL_OPTIONS` / `OTEL_*` で有効化する | OTLP/gRPC 4317 -> Datadog Agent -> Datadog APM | OpenTelemetry Java Agent が framework / library 呼び出しから span を作る |
+| Todo 業務 span | 手動計装 | `telemetry/TodoOperationTelemetryAspect.java`、`telemetry/TodoOperationSpanService.java` | OTLP/gRPC 4317 -> Datadog Agent -> Datadog APM | AOP で Todo 操作を囲み、OpenTelemetry API で span を作る |
+| JDBC / Runtime metrics | 自動計装 | OpenTelemetry Java Agent | OTLP/HTTP 4318 -> Datadog Agent -> Datadog Metrics | OpenTelemetry Java Agent が JVM / JDBC などから metrics を作る |
+| Todo 業務 metrics | 手動計装 | `telemetry/BusinessMetricsService.java` | Micrometer -> Java Agent -> OTLP/HTTP 4318 -> Datadog Agent -> Datadog Metrics | アプリコードが Micrometer API に明示的に記録する |
 
-## ログ分類
+## ログ出力の分類
 
-- 業務ログ（`eventType=BUSINESS`）
-  - 正常系の重要イベント、状態遷移、検索結果要約を記録する。
-- 監査ログ（`eventType=AUDIT`）
-  - 書き込み操作（`POST`/`PUT`/`DELETE`）の主体・対象・結果を記録する。
-- 異常系ログ（`eventType=ERROR`）
-  - 4xx は `WARN`、未処理例外（5xx）は `ERROR` で記録する。
-- デバッグログ（`eventType=DEBUG`）
-  - 正規化結果や分岐確認など、調査用途の詳細情報を記録する。
+この分類は、アプリケーションが SLF4J で出力するログの分類である。
+
+ログには `eventType` を付け、Datadog Logs で「業務イベント」「監査証跡」「異常」「詳細調査」を分けて検索できるようにする。分類を分ける理由は、通常運用で見るログ、監査で残すログ、障害時に優先して見るログ、必要な時だけ増やすログを混同しないためである。
+
+| 分類 | `eventType` | 主な用途 | 出力例 |
+| --- | --- | --- | --- |
+| 業務ログ | `BUSINESS` | 正常系の重要イベント、状態遷移、検索結果要約を確認する | Todo 一覧取得、Todo 永続化、完了状態の変更 |
+| 監査ログ | `AUDIT` | 書き込み操作の主体・対象・結果を証跡として残す | `POST` / `PUT` / `DELETE` の成功 |
+| 異常系ログ | `ERROR` | 入力異常や未処理例外を調査する | 4xx の警告、5xx の例外 |
+| デバッグログ | `DEBUG` | 調査時だけ詳細な分岐や正規化結果を確認する | page / size / sort の正規化結果 |
+
+ログレベルは分類と完全には一致しない。例えば `eventType=ERROR` のうち、クライアント修正可能な 4xx は `WARN`、未処理例外などの 5xx は `ERROR` として出力する。
 
 ## 実装の中心
 
-`logging` パッケージはログ文脈と主体識別子の安全な表現を担当する。`telemetry` パッケージは OpenTelemetry Java Agent の自動計装を実装する場所ではなく、Java Agent が自動生成しない Todo 業務単位の手動 span と、アプリ側で明示的に記録する業務 metrics を担当する。
+`logging` パッケージはログ文脈と主体識別子の安全な表現を担当する。`telemetry` パッケージは Todo 業務操作の手動 span と業務 metrics を担当する。自動計装は OpenTelemetry Java Agent と infra 側の設定で扱う。
 
 | ファイル | 主な責務 | 保守時の注意 |
 | --- | --- | --- |
