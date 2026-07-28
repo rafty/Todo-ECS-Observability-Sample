@@ -15,17 +15,21 @@
 - trace/span は、1つのリクエストが HTTP、Service、JDBC などをどう通ったかを追うために使う。
 - metrics は、成功/失敗件数、処理時間、JVM 状態などを集計し、傾向や異常を検知するために使う。
 
+OpenTelemetry では、trace は複数の span で構成される。手動計装でアプリコードが作るのは「業務 span」であり、通常は OpenTelemetry Java Agent が作った HTTP request trace の一部として追加される。
+
+この文書で使う AOP（Aspect Oriented Programming、アスペクト指向プログラミング）は、対象メソッドの前後に共通処理を差し込むための Spring の仕組みを指す。この backend では、Todo 操作メソッドの前後に span と metrics の記録処理を差し込むために使っている。`TodoOperationTelemetryAspect` の `Aspect` は、この差し込み処理をまとめたクラスであることを表している。
+
 この違いを曖昧にすると、ログへ不要な集計情報を詰め込んだり、metrics に高カーディナリティな値を入れたり、Java Agent の自動計装とアプリ側の手動計装を重複させたりしやすい。そのため、役割を分けて記載する。
 
 - ログ出力: アプリコードが SLF4J で出力し、Spring Boot が JSON 化する。
 - 自動計装: OpenTelemetry Java Agent が HTTP / Spring / JDBC / Runtime / Micrometer などを取得する。
-- 手動計装: `src/main/java/com/example/backend/telemetry` が Todo 業務操作の span と metrics だけを補う。
+- 手動計装: `src/main/java/com/example/backend/telemetry` が Todo 業務 span と業務 metrics を補う。
 
 | 対象 | 自動計装/手動計装/ログ出力 | 実装・設定 | Datadog への経路 | データの作り方 |
 | --- | --- | --- | --- | --- |
 | アプリログ | ログ出力 | `logging`、`TodoController`、`TodoServiceImpl`、`application.properties` | stdout -> FireLens -> Datadog Logs | SLF4J で出力し、Spring Boot 構造化ログで JSON 化する |
-| HTTP / Spring / JDBC の trace/span | 自動計装 | `Dockerfile` で Java Agent を同梱し、ECS task definition の `JAVA_TOOL_OPTIONS` / `OTEL_*` で有効化する | OTLP/gRPC 4317 -> Datadog Agent -> Datadog APM | OpenTelemetry Java Agent が framework / library 呼び出しから span を作る |
-| Todo 業務 span | 手動計装 | `telemetry/TodoOperationTelemetryAspect.java`、`telemetry/TodoOperationSpanService.java` | OTLP/gRPC 4317 -> Datadog Agent -> Datadog APM | AOP で Todo 操作を囲み、OpenTelemetry API で span を作る |
+| HTTP request trace / framework span | 自動計装 | `Dockerfile` で Java Agent を同梱し、ECS task definition の `JAVA_TOOL_OPTIONS` / `OTEL_*` で有効化する | OTLP/gRPC 4317 -> Datadog Agent -> Datadog APM | Java Agent が HTTP server span を起点に trace を作り、Spring / JDBC span を関連付ける |
+| Todo 業務 span | 手動計装 | `telemetry/TodoOperationTelemetryAspect.java`、`telemetry/TodoOperationSpanService.java` | OTLP/gRPC 4317 -> Datadog Agent -> Datadog APM | AOP で Todo 操作メソッドの前後に処理を差し込み、現在の trace に業務 span を追加する |
 | JDBC / Runtime metrics | 自動計装 | OpenTelemetry Java Agent | OTLP/HTTP 4318 -> Datadog Agent -> Datadog Metrics | OpenTelemetry Java Agent が JVM / JDBC などから metrics を作る |
 | Todo 業務 metrics | 手動計装 | `telemetry/BusinessMetricsService.java` | Micrometer -> Java Agent -> OTLP/HTTP 4318 -> Datadog Agent -> Datadog Metrics | アプリコードが Micrometer API に明示的に記録する |
 
@@ -53,7 +57,7 @@
 | `logging/RequestLoggingContextFilter.java` | リクエスト開始時に `requestId`、`path`、`httpMethod`、`x_amzn_trace_id` を MDC に入れる。未処理例外は `eventType=ERROR` として記録し、最後に `MDC.clear()` する。 | `trace_id` / `span_id` は独自生成しない。OpenTelemetry Java Agent または `TodoOperationSpanService` 由来値を壊さない。 |
 | `logging/OwnerSubjectHashService.java` | JWT `sub` などの主体識別子を SHA-256 hash に変換し、ログには `ownerSubjectHash` だけを出す。 | 生の `ownerSubject` はログへ出さない。空値は `anonymous`、hash 不能時は `hash-unavailable` に寄せる。 |
 | `telemetry/OpenTelemetryApiConfig.java` | Java Agent が設定する `GlobalOpenTelemetry` を Spring Bean として公開し、手動 span が同じ OpenTelemetry 基盤を参照できるようにする。 | アプリ内で別の OpenTelemetry SDK / exporter を起動しない。 |
-| `telemetry/TodoOperationTelemetryAspect.java` | `TodoServiceImpl` の Todo 操作だけを AOP で囲み、手動業務 span と `todo.operation.*` metrics を記録する入口になる。 | 旧 `PublicMethodTelemetryAspect` のような全 public method 計装へ戻さない。対象 operation は低カーディナリティ固定値に限定する。 |
+| `telemetry/TodoOperationTelemetryAspect.java` | `TodoServiceImpl` の Todo 操作だけに AOP で共通処理を差し込み、手動業務 span と `todo.operation.*` metrics を記録する入口になる。 | 旧 `PublicMethodTelemetryAspect` のような全 public method 計装へ戻さない。対象 operation は低カーディナリティ固定値に限定する。 |
 | `telemetry/TodoOperationSpanService.java` | OpenTelemetry API で手動業務 span を作成し、成功/失敗 status と低カーディナリティ attribute を付与する。必要な場合だけ `trace_id` / `span_id` を MDC に反映し、終了時に復元する。 | MDC の外側値を必ず復元する。`SpanContext` が invalid な場合は相関 ID を作らない。 |
 | `telemetry/BusinessMetricsService.java` | Micrometer `MeterRegistry` に `todo.operation.count` と `todo.operation.duration` を手動記録する。 | Datadog への export は Java Agent Micrometer instrumentation に任せる。アプリ側で OTel Metrics API と二重実装しない。 |
 | `telemetry/TelemetryEnvironmentValidator.java` | `DD_ENV` を `dev` / `stg` / `prod` に制限し、タグ不整合を起動時に検知する。 | 新しい環境名を追加する場合は infra の環境定義と同時に更新する。 |
@@ -69,7 +73,7 @@
 | `logging.structured.json.add.env=${DD_ENV:dev}` | Datadog Unified Service Tagging の `env` をログへ付与する。 |
 | `logging.structured.json.add.version=${DD_VERSION:unknown-version}` | Datadog Unified Service Tagging の `version` をログへ付与する。 |
 | `logging.structured.json.exclude=traceId,spanId` | 旧 camelCase キーを JSON トップレベルへ復活させない。 |
-| `spring.aop.proxy-target-class=true` | `TodoServiceImpl` に限定した業務 span / metrics AOP を実装クラスへ確実に適用する。 |
+| `spring.aop.proxy-target-class=true` | `TodoServiceImpl` に限定した業務 span / metrics の AOP 処理を実装クラスへ確実に適用する。 |
 
 ログレベルは `LOGGING_LEVEL_ROOT` と `LOGGING_LEVEL_COM_EXAMPLE_BACKEND` で変更できる。Datadog 取り込み量に直結するため、`DEBUG` は調査時だけ一時的に使う。
 
@@ -85,10 +89,11 @@ Controller と Service の両方にログがあるのは、HTTP 契約に近い�
 
 ## Trace / Span 計装方針
 
+- trace は span の集合であり、アプリコードが手動で追加する単位は span である。
 - HTTP server / Servlet / Spring Web MVC / JDBC などの framework / library span は OpenTelemetry Java Agent の自動計装を主経路とする。
 - 自動計装は `src/main/java/com/example/backend/telemetry` では実装しない。`Dockerfile` で Java Agent を image に同梱し、infra 側 ECS task definition の `JAVA_TOOL_OPTIONS` と `OTEL_*` 環境変数で有効化する。
 - Java Agent は任意の業務メソッドをすべて自動 span 化しない。
-- 業務処理単位の手動 span は `TodoOperationTelemetryAspect` により `TodoServiceImpl` の Todo 操作だけに限定する。
+- 業務処理単位の手動 span は `TodoOperationTelemetryAspect` により `TodoServiceImpl` の Todo 操作だけに限定し、通常は Java Agent が作った HTTP request trace の一部として記録される。
 - 旧 `PublicMethodTelemetryAspect` のように Spring 管理 Bean の全 public method を span 化する方式は採用しない。
 
 | 対象メソッド | operation |
