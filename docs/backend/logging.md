@@ -33,6 +33,8 @@ OpenTelemetry では、trace は複数の span で構成される。手動計装
 | JDBC / Runtime metrics | 自動計装 | OpenTelemetry Java Agent | OTLP/HTTP 4318 -> Datadog Agent -> Datadog Metrics | OpenTelemetry Java Agent が JVM / JDBC などから metrics を作る |
 | Todo 業務 metrics | 手動計装 | `telemetry/BusinessMetricsService.java` | Micrometer -> Java Agent -> OTLP/HTTP 4318 -> Datadog Agent -> Datadog Metrics | アプリコードが Micrometer API に明示的に記録する |
 
+ECS task 内で FireLens / Datadog Agent / CloudWatch Logs がどのデータを扱うかは、[Observability 仕様](../infra/o11y.md#3-ログとテレメトリの実装方式) の同じ分類を参照する。
+
 ## ログ出力の分類
 
 この分類は、アプリケーションが SLF4J で出力するログの分類である。
