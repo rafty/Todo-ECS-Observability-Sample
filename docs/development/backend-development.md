@@ -107,6 +107,6 @@ curl -i http://localhost:8080/actuator/health
 ## 関連
 
 - [backend 入口 README](../../backend/README.md)
-- [backend ログ / 業務テレメトリ設計](../backend/logging.md)
+- [backend ログ / 手動業務テレメトリ設計](../backend/logging.md)
 - [AWS デプロイ手順（Monorepo 全体）](./aws-deployment-manual.md)
 - [O11y 仕様（infra）](../infra/o11y.md)
