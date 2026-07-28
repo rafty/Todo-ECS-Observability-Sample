@@ -1,11 +1,25 @@
-# Backend ログ / 業務テレメトリ設計
+# Backend ログ / 手動業務テレメトリ設計
 
 ## この文書の目的
 
 - `backend/` のアプリケーションログ実装方針を、開発者・運用者が同じ前提で参照できるようにする。
 - AWS 実行環境（ECS -> FireLens -> Datadog Logs）で調査可能なログキーと運用ルールを明確化する。
 - OpenTelemetry Java Agent 導入後も `trace_id` / `span_id` を主相関キーとして維持する。
-- `src/main/java/com/example/backend/logging` と `src/main/java/com/example/backend/telemetry` の責務を明確にし、保守時にログ・span・metrics の境界を誤解しないようにする。
+- `src/main/java/com/example/backend/logging` と `src/main/java/com/example/backend/telemetry` の責務を明確にし、自動計装と手動計装の境界を誤解しないようにする。
+
+## まず押さえる境界
+
+`OpenTelemetry Java Agent` は ECS 上の JVM 起動時に `JAVA_TOOL_OPTIONS=-javaagent:/app/opentelemetry-javaagent.jar` で attach され、HTTP / Spring / JDBC / Runtime / Micrometer などを自動計装する。これはアプリケーションコードの外側で動くため、`src/main/java/com/example/backend/telemetry` に自動計装そのものの実装はない。
+
+`src/main/java/com/example/backend/telemetry` は、Java Agent が自動生成しない Todo 業務単位の span と、アプリコードが明示的に記録する業務 metrics を扱う。つまり、このパッケージは「自動計装の実装」ではなく「Java Agent が用意した OpenTelemetry / Micrometer の実行基盤に乗せる手動業務計装」である。
+
+| Signal | 自動/手動 | 主な実装場所 | Datadog への経路 | この文書で見る観点 |
+| --- | --- | --- | --- | --- |
+| アプリログ | 手動ログ出力 + Spring Boot 構造化ログ | `logging`、`TodoController`、`TodoServiceImpl`、`application.properties` | stdout -> FireLens -> Datadog Logs | JSON キー、MDC、監査ログ、機密情報非出力 |
+| Trace / Span（自動計装） | 自動 | OpenTelemetry Java Agent。repo 内では `Dockerfile` と ECS task definition の環境変数で attach / export を設定 | OTLP/gRPC 4317 -> Datadog Agent -> Datadog APM | backend コードでは独自実装しない。詳細は `docs/infra/o11y.md` |
+| Trace / Span（業務/手動計装） | 手動 | `telemetry/TodoOperationTelemetryAspect.java`、`telemetry/TodoOperationSpanService.java` | OTLP/gRPC 4317 -> Datadog Agent -> Datadog APM | Todo 操作だけを低カーディナリティ span として補う |
+| Metrics（JDBC / Runtime など） | 自動 | OpenTelemetry Java Agent | OTLP/HTTP 4318 -> Datadog Agent -> Datadog Metrics | backend コードでは独自実装しない。詳細は `docs/infra/o11y.md` |
+| 業務 metrics | 手動記録 + Java Agent export | `telemetry/BusinessMetricsService.java` | Micrometer -> Java Agent -> OTLP/HTTP 4318 -> Datadog Agent -> Datadog Metrics | `todo.operation.*` を Micrometer API で記録する |
 
 ## ログ分類
 
@@ -20,16 +34,16 @@
 
 ## 実装の中心
 
-`logging` パッケージはログ文脈と主体識別子の安全な表現を担当し、`telemetry` パッケージは OpenTelemetry Java Agent と連携する業務 span / metrics を担当する。
+`logging` パッケージはログ文脈と主体識別子の安全な表現を担当する。`telemetry` パッケージは OpenTelemetry Java Agent の自動計装を実装する場所ではなく、Java Agent が自動生成しない Todo 業務単位の手動 span と、アプリ側で明示的に記録する業務 metrics を担当する。
 
 | ファイル | 主な責務 | 保守時の注意 |
 | --- | --- | --- |
 | `logging/RequestLoggingContextFilter.java` | リクエスト開始時に `requestId`、`path`、`httpMethod`、`x_amzn_trace_id` を MDC に入れる。未処理例外は `eventType=ERROR` として記録し、最後に `MDC.clear()` する。 | `trace_id` / `span_id` は独自生成しない。OpenTelemetry Java Agent または `TodoOperationSpanService` 由来値を壊さない。 |
 | `logging/OwnerSubjectHashService.java` | JWT `sub` などの主体識別子を SHA-256 hash に変換し、ログには `ownerSubjectHash` だけを出す。 | 生の `ownerSubject` はログへ出さない。空値は `anonymous`、hash 不能時は `hash-unavailable` に寄せる。 |
-| `telemetry/OpenTelemetryApiConfig.java` | Java Agent が設定する `GlobalOpenTelemetry` を Spring Bean として公開する。 | アプリ内で別の OpenTelemetry SDK / exporter を起動しない。 |
-| `telemetry/TodoOperationTelemetryAspect.java` | `TodoServiceImpl` の Todo 操作だけを AOP で囲み、業務 span と `todo.operation.*` metrics を記録する。 | 旧 `PublicMethodTelemetryAspect` のような全 public method 計装へ戻さない。対象 operation は低カーディナリティ固定値に限定する。 |
+| `telemetry/OpenTelemetryApiConfig.java` | Java Agent が設定する `GlobalOpenTelemetry` を Spring Bean として公開し、手動 span が同じ OpenTelemetry 基盤を参照できるようにする。 | アプリ内で別の OpenTelemetry SDK / exporter を起動しない。 |
+| `telemetry/TodoOperationTelemetryAspect.java` | `TodoServiceImpl` の Todo 操作だけを AOP で囲み、手動業務 span と `todo.operation.*` metrics を記録する入口になる。 | 旧 `PublicMethodTelemetryAspect` のような全 public method 計装へ戻さない。対象 operation は低カーディナリティ固定値に限定する。 |
 | `telemetry/TodoOperationSpanService.java` | OpenTelemetry API で手動業務 span を作成し、成功/失敗 status と低カーディナリティ attribute を付与する。必要な場合だけ `trace_id` / `span_id` を MDC に反映し、終了時に復元する。 | MDC の外側値を必ず復元する。`SpanContext` が invalid な場合は相関 ID を作らない。 |
-| `telemetry/BusinessMetricsService.java` | Micrometer `MeterRegistry` に `todo.operation.count` と `todo.operation.duration` を記録する。 | Datadog への export は Java Agent Micrometer instrumentation に任せる。アプリ側で OTel Metrics API と二重実装しない。 |
+| `telemetry/BusinessMetricsService.java` | Micrometer `MeterRegistry` に `todo.operation.count` と `todo.operation.duration` を手動記録する。 | Datadog への export は Java Agent Micrometer instrumentation に任せる。アプリ側で OTel Metrics API と二重実装しない。 |
 | `telemetry/TelemetryEnvironmentValidator.java` | `DD_ENV` を `dev` / `stg` / `prod` に制限し、タグ不整合を起動時に検知する。 | 新しい環境名を追加する場合は infra の環境定義と同時に更新する。 |
 
 ## 構造化ログ設定
@@ -57,11 +71,12 @@
 
 Controller と Service の両方にログがあるのは、HTTP 契約に近い監査証跡と、永続化・状態遷移に近い業務イベントを分けるためである。どちらにも JWT `sub` 生値やリクエスト本文全文は出さない。
 
-## トレース計装方針（本サンプル固有）
+## Trace / Span 計装方針
 
 - HTTP server / Servlet / Spring Web MVC / JDBC などの framework / library span は OpenTelemetry Java Agent の自動計装を主経路とする。
+- 自動計装は `src/main/java/com/example/backend/telemetry` では実装しない。`Dockerfile` で Java Agent を image に同梱し、infra 側 ECS task definition の `JAVA_TOOL_OPTIONS` と `OTEL_*` 環境変数で有効化する。
 - Java Agent は任意の業務メソッドをすべて自動 span 化しない。
-- 業務処理単位の span は `TodoOperationTelemetryAspect` により `TodoServiceImpl` の Todo 操作だけに限定する。
+- 業務処理単位の手動 span は `TodoOperationTelemetryAspect` により `TodoServiceImpl` の Todo 操作だけに限定する。
 - 旧 `PublicMethodTelemetryAspect` のように Spring 管理 Bean の全 public method を span 化する方式は採用しない。
 
 | 対象メソッド | operation |
@@ -73,6 +88,19 @@ Controller と Service の両方にログがあるのは、HTTP 契約に近い�
 | `TodoServiceImpl.deleteTodo` | `todo.delete` |
 
 手動業務 span の attribute は `business.operation`、`result.status` など低カーディナリティ値に限定する。JWT、Authorization header、Cookie、DB 接続情報、SQL bind parameter、PII 生値は span attribute に含めない。
+
+## Metrics 計装方針
+
+- JDBC / HikariCP / JVM Runtime などの metrics は OpenTelemetry Java Agent の自動計装で取得する。
+- `src/main/java/com/example/backend/telemetry` は、これらの自動 metrics を実装しない。
+- `BusinessMetricsService` は Todo 業務操作の件数と処理時間だけを Micrometer API で手動記録する。
+- `todo.operation.count` と `todo.operation.duration` の Datadog 送信は、Java Agent の Micrometer instrumentation に任せる。
+- アプリ内で OpenTelemetry Metrics API と Micrometer API を二重運用しない。
+
+| metric | 記録元 | 主なタグ | 用途 |
+| --- | --- | --- | --- |
+| `todo.operation.count` | `BusinessMetricsService` | `service`、`env`、`operation`、`result` | Todo 操作の成功/失敗件数を集計する |
+| `todo.operation.duration` | `BusinessMetricsService` | `service`、`env`、`operation`、`result` | Todo 操作の処理時間分布を ms 単位で確認する |
 
 ## 監査対象範囲
 

@@ -8,7 +8,7 @@
 | --- | --- |
 | AWS へデプロイする手順 | [development/aws-deployment-manual.md](./development/aws-deployment-manual.md) |
 | backend のローカル開発手順 | [development/backend-development.md](./development/backend-development.md) |
-| backend のログ / 業務テレメトリ実装 | [backend/logging.md](./backend/logging.md) |
+| backend のログ / 手動業務テレメトリ実装 | [backend/logging.md](./backend/logging.md) |
 | Observability（logs / metrics / trace の経路と責務） | [infra/o11y.md](./infra/o11y.md) |
 | frontend の認証・runtime 設定 | [frontend/README.md](./frontend/README.md) |
 | 負荷テスト環境（DLT）デプロイ手順 | [load-test/load-test-deployment.md](./load-test/load-test-deployment.md) |
@@ -40,7 +40,7 @@ flowchart TB
 ### backend
 
 - [backend ドキュメント入口](./backend/README.md)
-- [ログ / 業務テレメトリ設計](./backend/logging.md)
+- [ログ / 手動業務テレメトリ設計](./backend/logging.md)
 
 ### frontend
 
