@@ -142,7 +142,7 @@ export class TodoBackendEcsServiceConstruct extends Construct {
         // なぜ必要か: ECS/Fargate で task_arn などオーケストレーター粒度タグを付与し、Datadog 上の絞り込みを可能にするため。
         DD_CHECKS_TAG_CARDINALITY: 'orchestrator',
         DD_OTLP_CONFIG_RECEIVER_PROTOCOLS_GRPC_ENDPOINT: '0.0.0.0:4317',
-        // なぜ必要か: Micrometer OTLP metrics は HTTP 送信のため、Agent 側に OTLP/HTTP 受け口(4318)を有効化するため。
+        // なぜ必要か: Java Agent が送る Runtime/JDBC/Micrometer metrics を受けるため、Agent 側に OTLP/HTTP 受け口(4318)を有効化するため。
         DD_OTLP_CONFIG_RECEIVER_PROTOCOLS_HTTP_ENDPOINT: '0.0.0.0:4318',
         DD_SITE: props.datadogConfig.ddSite,
         DD_ENV: props.environmentName,

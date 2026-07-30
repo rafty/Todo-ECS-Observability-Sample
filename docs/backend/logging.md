@@ -17,6 +17,8 @@
 
 OpenTelemetry では、trace は複数の span で構成される。手動計装でアプリコードが作るのは「業務 span」であり、通常は OpenTelemetry Java Agent が作った HTTP request trace の一部として追加される。
 
+この文書で「イベント」と書く場合、原則としてアプリが JSON ログとして出すログイベントを指す。OpenTelemetry にも `span event` という用語があるが、この backend では監査や業務履歴の主経路にはしない。例外情報は `span.recordException(...)` により span 内の補助情報として残る場合があるが、運用者が主体・対象・結果を読むための記録は `eventType=AUDIT` / `BUSINESS` のログイベントで扱う。
+
 この文書で使う AOP（Aspect Oriented Programming、アスペクト指向プログラミング）は、対象メソッドの前後に共通処理を差し込むための Spring の仕組みを指す。この backend では、Todo 操作メソッドの前後に span と metrics の記録処理を差し込むために使っている。`TodoOperationTelemetryAspect` の `Aspect` は、この差し込み処理をまとめたクラスであることを表している。
 
 この違いを曖昧にすると、ログへ不要な集計情報を詰め込んだり、metrics に高カーディナリティな値を入れたり、Java Agent の自動計装とアプリ側の手動計装を重複させたりしやすい。そのため、役割を分けて記載する。
@@ -35,11 +37,25 @@ OpenTelemetry では、trace は複数の span で構成される。手動計装
 
 ECS task 内で FireLens / Datadog Agent / CloudWatch Logs がどのデータを扱うかは、[Observability 仕様](../infra/o11y.md#3-ログとテレメトリの実装方式) の同じ分類を参照する。
 
+### 1リクエストで何が起きるか
+
+`POST /api/todos` を例にすると、次の順で別々のデータが作られる。
+
+1. `RequestLoggingContextFilter` が `requestId`、`path`、`httpMethod`、`x_amzn_trace_id` を MDC に入れる。
+2. OpenTelemetry Java Agent が HTTP server span を開始し、後続の Spring / JDBC span を同じ trace に関連付ける。
+3. `TodoController` が `eventType=AUDIT` のログイベントを出し、作成操作の主体ハッシュ、対象 Todo ID、HTTP status を残す。
+4. `TodoOperationTelemetryAspect` が `todo.create` の業務 span を作り、成功/失敗を span status と低カーディナリティ attribute に残す。
+5. `BusinessMetricsService` が `todo.operation.count` と `todo.operation.duration` を `operation=todo.create`、`result=success|failure` 付きで記録する。
+6. JSON ログは stdout から FireLens へ、trace / metrics は Java Agent から Datadog Agent sidecar へ送られる。
+
+このため、障害調査では「ログに何が書かれているか」と「APM の span がどこで遅いか」と「metrics の傾向がどう変わったか」を同じ `trace_id` / `service` / `env` 軸で突き合わせる。
+
 ## ログ出力の分類
 
 この分類は、アプリケーションが SLF4J で出力するログの分類である。
 
 ログには `eventType` を付け、Datadog Logs で「業務イベント」「監査証跡」「異常」「詳細調査」を分けて検索できるようにする。分類を分ける理由は、通常運用で見るログ、監査で残すログ、障害時に優先して見るログ、必要な時だけ増やすログを混同しないためである。
+`eventType` はログ分類用の JSON フィールドであり、span 名、span status、metrics tag ではない。
 
 | 分類 | `eventType` | 主な用途 | 出力例 |
 | --- | --- | --- | --- |

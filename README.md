@@ -39,6 +39,21 @@ O11y コンポーネントは責務を分けています。
 - `LogRouterContainer`（FireLens / Fluent Bit）: アプリの stdout / stderr JSON ログを Datadog Logs へ送る。ログ配送を trace / metrics 経路から分離し、OTLP logs は使わない。
 - `CloudWatch Logs`: `log_router` / `datadog-agent` の内部ログ、転送エラー、OTLP 受信/送信エラーの確認先。ECS Service / Task の状態変化は ECS の control plane 側イベントとして扱い、アプリログの保管先とは分ける。
 
+## Observability の読み方
+
+このリポジトリでは、同じ `/api/todos` の 1 リクエストから複数種類のデータが作られます。ただし、データの意味と配送経路は分かれています。
+
+| 用語 | このプロジェクトでの意味 | 主な確認先 |
+| --- | --- | --- |
+| log / ログイベント | アプリが `eventType` 付き JSON として stdout へ出す、人間が読む記録 | Datadog Logs |
+| trace | 1 リクエスト全体の処理経路を span の木として表したもの | Datadog APM |
+| span | trace の中の 1 処理区間。HTTP、Spring、JDBC、`todo.create` など | Datadog APM |
+| span event | span 内に付く補助記録。業務監査の主経路ではなく、例外記録などに限定 | Datadog APM |
+| metrics | 件数、処理時間、JVM 状態などの数値系列 | Datadog Metrics |
+| ECS event | ECS Service / Task の起動・停止など AWS control plane の状態変化 | ECS / AWS 側イベント |
+
+例えば Todo 作成では、Controller / Service がログイベントを出し、Java Agent が HTTP / JDBC span を作り、`TodoOperationTelemetryAspect` が `todo.create` span と `todo.operation.*` metrics を補います。ログは FireLens、trace / metrics は Datadog Agent sidecar を通るため、同じリクエスト由来でも転送経路は別です。相互にたどるための共通キーが `service` / `env` / `version` と `trace_id` / `span_id` です。
+
 ## 最初に読むドキュメント
 
 1. 全体入口: [docs/README.md](./docs/README.md)
