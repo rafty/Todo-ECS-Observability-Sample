@@ -39,8 +39,10 @@
 | --- | --- | --- | --- | --- |
 | logs | SLF4J + Logback(JSON) | `TodoBackendContainer (awsfirelens)` -> `LogRouterContainer` | Datadog Logs | アプリログは CloudWatch Logs へ直接送信しない |
 | metrics | OpenTelemetry Java Agent + Micrometer API (`MeterRegistry`) | OTLP/HTTP `http://localhost:4318/v1/metrics` -> `DatadogAgentContainer` | Datadog Metrics | Java Agent の Runtime / JDBC / Micrometer instrumentation。`todo.operation.count`, `todo.operation.duration` は Micrometer API で記録 |
-| traces / span events | OpenTelemetry Java Agent + OpenTelemetry API | OTLP/gRPC `http://localhost:4317` -> `DatadogAgentContainer` | Datadog APM | framework / library span は Java Agent、Todo 業務 span は `TodoOperationTelemetryAspect` に限定 |
+| traces / spans | OpenTelemetry Java Agent + OpenTelemetry API | OTLP/gRPC `http://localhost:4317` -> `DatadogAgentContainer` | Datadog APM | framework / library span は Java Agent、Todo 業務 span は `TodoOperationTelemetryAspect` に限定 |
 | OTel logs | 使用しない | `OTEL_LOGS_EXPORTER=none` | なし | 予期しない二重課金を避ける |
+
+補足: 本 ADR で扱う「業務イベント」は Datadog Logs に入る JSON ログイベントを指す。OpenTelemetry の `span event` は span 内の補助情報であり、監査証跡や業務履歴の主経路にはしない。
 
 ### 2.2 ECS タスク構成
 

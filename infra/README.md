@@ -48,6 +48,8 @@ npx cdk deploy -c env=prod
 | Trace / Span（業務/手動計装） | `TodoOperationTelemetryAspect` + OpenTelemetry API | app -> OTLP/gRPC `localhost:4317` -> Datadog Agent | Datadog APM |
 | Metrics（JDBC / Runtime / Micrometer） | OpenTelemetry Java Agent | app -> OTLP/HTTP `localhost:4318/v1/metrics` -> Datadog Agent | Datadog Metrics |
 
+同じ API リクエストから logs / traces / metrics が同時に作られることがありますが、ECS task 内の転送経路は分かれます。ログの `eventType` は Datadog Logs で検索するための JSON フィールドであり、OpenTelemetry の span 名や span event ではありません。ECS Service / Task の起動・停止イベントも AWS control plane 側のイベントであり、アプリログとは別に扱います。
+
 ### CDK で注入する主要環境変数
 
 #### `TodoBackendContainer`
